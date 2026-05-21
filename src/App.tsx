@@ -2007,9 +2007,9 @@ export default function App() {
             </div>
 
             {/* Bottom mini disclaimer footer */}
-            <footer className="bg-[#f8fafc] py-4 px-6 border-t border-[#e2e8f0] flex items-center justify-between text-[#cbd5e1] font-mono text-[9px] print:hidden">
-              <div>System Date Engine: Active ISO 8601</div>
-              <div>Free Federal Calendar Tool • Print/PDF Optimised</div>
+            <footer className="bg-[#f8fafc] py-4 px-6 border-t border-[#e2e8f0] flex items-center justify-between text-slate-400 font-mono text-[9.5px] print:hidden">
+              <div>PTO and Coverage Planner. — Internal Use Only</div>
+              <div>Created by Loraine Velez for MGMT Residential Use</div>
             </footer>
 
           </section>
