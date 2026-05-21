@@ -1512,7 +1512,7 @@ export default function App() {
             </div>
 
             {/* Weeks displays - Day Columns header */}
-            <div className="grid grid-cols-7 bg-[#f1f5f9] border-b border-[#e2e8f0] print:bg-transparent print-border-b print-calendar-weeks">
+            <div className="grid grid-cols-7 bg-[#f1f5f9] border-b border-[#e2e8f0] print-calendar-weeks">
               {weekDays.map((day) => (
                 <div 
                   key={day} 
@@ -1525,7 +1525,7 @@ export default function App() {
             </div>
 
             {/* Days Cells Grid */}
-            <div className="grid grid-cols-7 bg-[#e2e8f0] gap-[1px] print:bg-transparent print-border print-calendar-grid">
+            <div className="grid grid-cols-7 bg-[#e2e8f0] gap-[1px] print-calendar-grid">
               
               {calendarDays.map((day, index) => {
                 const customHoliday = companyHolidays[day.dateKey];
