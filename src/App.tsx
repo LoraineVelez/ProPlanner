@@ -17,7 +17,10 @@ import {
   SlidersHorizontal,
   Pencil,
   Undo,
-  Redo
+  Redo,
+  Clock,
+  Share2,
+  Link2
 } from 'lucide-react';
 import { getUSFederalHolidays, formatDateKey } from './utils/holidays';
 import { motion, AnimatePresence } from 'motion/react';
@@ -435,6 +438,19 @@ export default function App() {
   });
 
   const [showHolidayListModal, setShowHolidayListModal] = useState(false);
+
+  // Public Read-Only State & Public Sharing Customization
+  const [isReadOnlyView, setIsReadOnlyView] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const isPublic = params.get('readonly') === 'true' || params.get('view') === 'public' || params.get('mode') === 'readonly';
+      setIsReadOnlyView(isPublic);
+    }
+  }, []);
 
   // Undo/Redo States for dayRows
   const [pastStates, setPastStates] = useState<Record<string, CalendarRow[]>[]>([]);
@@ -1012,58 +1028,107 @@ export default function App() {
               <CalendarIcon id="header_icon" className={`w-6 h-6 stroke-[2.2px] ${currentThemeStyle.text}`} />
             </div>
              <div className="title-group">
-              <h1 className="text-[26px] font-medium tracking-tight text-[#0f172a] font-display leading-tight flex items-center gap-4">
+              <h1 className="text-[26px] font-medium tracking-tight text-[#0f172a] font-display leading-tight flex flex-wrap items-center gap-4">
                 <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={handleUndo}
-                    disabled={pastStates.length === 0}
-                    className={`p-1.5 rounded-lg border-transparent transition-all ${
-                      pastStates.length === 0
-                        ? 'text-slate-300 cursor-not-allowed opacity-40'
-                        : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
-                    }`}
-                    title="Undo (Ctrl+Z)"
-                  >
-                    <Undo className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRedo}
-                    disabled={futureStates.length === 0}
-                    className={`p-1.5 rounded-lg border-transparent transition-all ${
-                      futureStates.length === 0
-                        ? 'text-slate-300 cursor-not-allowed opacity-40'
-                        : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
-                    }`}
-                    title="Redo (Ctrl+Y)"
-                  >
-                    <Redo className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {!isReadOnlyView && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={handleUndo}
+                      disabled={pastStates.length === 0}
+                      className={`p-1.5 rounded-lg border-transparent transition-all ${
+                        pastStates.length === 0
+                          ? 'text-slate-300 cursor-not-allowed opacity-40'
+                          : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
+                      }`}
+                      title="Undo (Ctrl+Z)"
+                    >
+                      <Undo className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRedo}
+                      disabled={futureStates.length === 0}
+                      className={`p-1.5 rounded-lg border-transparent transition-all ${
+                        futureStates.length === 0
+                          ? 'text-slate-300 cursor-not-allowed opacity-40'
+                          : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
+                      }`}
+                      title="Redo (Ctrl+Y)"
+                    >
+                      <Redo className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </h1>
               <p className="text-sm text-[#64748b] font-semibold mt-0.5">
                 {calendarTitle || "Productivity Planner & Federal Holidays"}
               </p>
+              
+              {/* Publicly Visible Links requested by the user */}
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <a
+                  href="https://clock.payrollservers.us/#/clock/web/login"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-slate-55 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-3 py-1 rounded-full text-[11px] font-bold transition-all shadow-3xs"
+                  title="Open Employee Time Clock in a new tab"
+                >
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Employee Time Clock</span>
+                </a>
+                <a
+                  href="chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://drive.usercontent.google.com/download?id=1rhIiyrdYWVvk-zDir-AHS5FAYMx9V5eS&authuser=3&acrobatPromotionSource=gdrive_chrome-list"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-3 py-1 rounded-full text-[11px] font-bold transition-all shadow-3xs"
+                  title="Open Employee Handbook in a new tab"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Employee Handbook</span>
+                </a>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-5 sm:gap-6">
-            {/* Auto-saved indicator */}
-            <div className="text-right hidden xl:block">
-              {isSaving ? (
-                <span className="text-xs font-semibold text-[#64748b] flex items-center gap-1.5">
-                  <RefreshCw className={`w-3.5 h-3.5 animate-spin ${currentThemeStyle.text}`} /> Syncing changes...
-                </span>
-              ) : savedTime ? (
-                <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Synced: {savedTime}
-                </span>
-              ) : (
-                <span className="text-xs text-slate-400 font-semibold">Offline cache hot</span>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            {/* Auto-saved indicator - Hidden in read-only view */}
+            {!isReadOnlyView && (
+              <div className="text-right hidden xl:block">
+                {isSaving ? (
+                  <span className="text-xs font-semibold text-[#64748b] flex items-center gap-1.5">
+                    <RefreshCw className={`w-3.5 h-3.5 animate-spin ${currentThemeStyle.text}`} /> Syncing changes...
+                  </span>
+                ) : savedTime ? (
+                  <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" /> Synced: {savedTime}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 font-semibold">Offline cache hot</span>
+                )}
+              </div>
+            )}
+
+            {/* Public View Status Indicator */}
+            {isReadOnlyView && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-150 rounded-xl text-emerald-700 text-xs font-bold shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Read-Only Guest Mode</span>
+              </div>
+            )}
+
+            {/* Share Public Link Button */}
+            {!isReadOnlyView && (
+              <button
+                type="button"
+                onClick={() => setShowShareModal(true)}
+                className="flex items-center gap-2 px-3.5 py-2.5 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 rounded-xl text-indigo-700 transition-all cursor-pointer text-xs font-bold shadow-3xs"
+                title="Generate read-only calendar link for employees"
+              >
+                <Share2 className="w-4 h-4 text-indigo-500" />
+                <span>Share Public Link</span>
+              </button>
+            )}
 
             {/* Holiday Switch - Replaced with clickable popup list */}
             <button
@@ -1075,7 +1140,7 @@ export default function App() {
               <Award className="w-4 h-4 text-amber-500" />
               <span>Holidays</span>
               <span className="bg-slate-100 text-slate-600 rounded-md px-1.5 py-0.5 text-[10px] font-bold">
-                {holidayCounts.active}/{holidayCounts.total} Active
+                {holidayCounts.active}/{holidayCounts.total}
               </span>
             </button>
 
@@ -1098,7 +1163,8 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 print:block">
           
           {/* Calendar Sidebar Settings Desk - Hidden on PDF Print */}
-          <section id="sidebar_settings" className="print:hidden lg:col-span-1 space-y-5">
+          {!isReadOnlyView && (
+            <section id="sidebar_settings" className="print:hidden lg:col-span-1 space-y-5">
             
             {/* Month & Year Navigation Card */}
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)] space-y-4">
@@ -1473,21 +1539,51 @@ export default function App() {
             </div>
 
           </section>
+          )}
 
           {/* Calendar Master Canvas */}
-          <section className="lg:col-span-3 bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] overflow-hidden print:border-none print:shadow-none print:m-0 print:p-0 print-calendar-container">
+          <section className={`${isReadOnlyView ? 'lg:col-span-4' : 'lg:col-span-3'} bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] overflow-hidden print:border-none print:shadow-none print:m-0 print:p-0 print-calendar-container`}>
             
             {/* Header Title block - Displays beautifully and matches the timeanddate layout */}
             <div className="bg-white p-6 border-b border-[#e2e8f0] print:py-4 print:px-0 flex items-center justify-between gap-4 print-calendar-header">
               <div className="flex-1">
-                <h2 className="text-3xl font-medium font-display text-[#0f172a] tracking-tight flex items-center gap-3 print:text-3.5xl">
+                <h2 className="text-3xl font-medium font-display text-[#0f172a] tracking-tight flex flex-wrap items-center gap-3 print:text-3.5xl">
                   <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
+                  {isReadOnlyView && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-[10px] font-bold uppercase tracking-wider print:hidden shadow-3xs">
+                      Read-Only View
+                    </span>
+                  )}
                 </h2>
                 <div className="text-[11px] text-[#94a3b8] font-bold uppercase tracking-wider font-display pr-1 mt-1 font-mono">
                   {calendarTitle || "PTO & COVERAGE RECORDER"}
                 </div>
                 <div className={`text-[10px] ${currentThemeStyle.text} font-bold uppercase tracking-wider mt-1 hidden print:block font-mono`}>
                   Federal Holidays: {showHolidays ? "ENABLED" : "MUTED"}
+                </div>
+
+                {/* Publicly Visible Links across from Month/Year in the Canvas itself */}
+                <div className="flex flex-wrap items-center gap-2 mt-2.5 print:hidden">
+                  <a
+                    href="https://clock.payrollservers.us/#/clock/web/login"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-full text-[10.5px] font-bold transition-all shadow-3xs"
+                    title="Open Employee Time Clock in a new tab"
+                  >
+                    <Clock className="w-3 h-3 text-slate-500" />
+                    <span>Time Clock</span>
+                  </a>
+                  <a
+                    href="chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://drive.usercontent.google.com/download?id=1rhIiyrdYWVvk-zDir-AHS5FAYMx9V5eS&authuser=3&acrobatPromotionSource=gdrive_chrome-list"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-full text-[10.5px] font-bold transition-all shadow-3xs"
+                    title="Open Employee Handbook in a new tab"
+                  >
+                    <BookOpen className="w-3 h-3 text-slate-500" />
+                    <span>Handbook</span>
+                  </a>
                 </div>
               </div>
 
@@ -1829,7 +1925,7 @@ export default function App() {
                                  ? "e.g. Critical Shift / Observed Coverage" 
                                  : (fedHolidayName ? `Override: ${fedHolidayName}` : "e.g. Easter Holiday / Closed")
                              }
-                             value={currentHoliday.name}
+                             disabled={isReadOnlyView} value={currentHoliday.name}
                              onChange={(e) => updateCompanyHoliday(activeDateKey, e.target.value, currentHoliday.closed, currentHolidayType)}
                              className={`w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg p-2 focus:outline-hidden ${currentThemeStyle.focusBorder} text-slate-800`}
                            />
@@ -1843,7 +1939,7 @@ export default function App() {
                            <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-lg">
                              <button
                                type="button"
-                               onClick={() => updateCompanyHoliday(activeDateKey, currentHoliday.name, true, currentHolidayType)}
+                               onClick={() => !isReadOnlyView && updateCompanyHoliday(activeDateKey, currentHoliday.name, true, currentHolidayType)} disabled={isReadOnlyView}
                                className={`text-[11px] font-extrabold py-1.5 rounded-md transition-all cursor-pointer text-center ${
                                  currentHoliday.closed
                                    ? 'bg-slate-900 text-white shadow-xs font-black'
@@ -1854,7 +1950,7 @@ export default function App() {
                              </button>
                              <button
                                type="button"
-                               onClick={() => updateCompanyHoliday(activeDateKey, currentHoliday.name, false, currentHolidayType)}
+                               onClick={() => !isReadOnlyView && updateCompanyHoliday(activeDateKey, currentHoliday.name, false, currentHolidayType)} disabled={isReadOnlyView}
                                className={`text-[11px] font-extrabold py-1.5 rounded-md transition-all cursor-pointer text-center ${
                                  !currentHoliday.closed
                                    ? 'bg-white text-slate-800 shadow-xs font-black border border-slate-200/50'
@@ -1903,7 +1999,7 @@ export default function App() {
                             {/* Text Input Block */}
                             <input
                               type="text"
-                              value={row.text}
+                              disabled={isReadOnlyView} value={row.text}
                               onChange={(e) => updateDayRow(activeDateKey, rIdx, e.target.value, row.color)}
                               placeholder="e.g. Employee Out (Flex)"
                               className={`text-xs font-bold leading-normal text-slate-800 placeholder-slate-300 bg-white border border-slate-200 rounded-lg px-2.5 py-2 flex-1 focus:outline-hidden ${currentThemeStyle.focusBorder}`}
@@ -1913,7 +2009,7 @@ export default function App() {
                             <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200 justify-center">
                               <button
                                 type="button"
-                                onClick={() => updateDayRow(activeDateKey, rIdx, row.text, 'none')}
+                                onClick={() => !isReadOnlyView && updateDayRow(activeDateKey, rIdx, row.text, 'none')} disabled={isReadOnlyView}
                                 className={`w-5 h-5 rounded-full bg-slate-100 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200 cursor-pointer ${
                                   row.color === 'none' ? 'ring-2 ring-slate-400 ring-offset-1' : ''
                                 }`}
@@ -1929,7 +2025,7 @@ export default function App() {
                                   <button
                                     key={`row_btn_${key}`}
                                     type="button"
-                                    onClick={() => updateDayRow(activeDateKey, rIdx, row.text, key)}
+                                    onClick={() => !isReadOnlyView && updateDayRow(activeDateKey, rIdx, row.text, key)} disabled={isReadOnlyView}
                                     className={`w-4.5 h-4.5 rounded-full cursor-pointer transition-all hover:scale-125 hover:rotate-12 ${colorOpt.dotBg} ${
                                       isSelected ? 'ring-2 ring-slate-800 ring-offset-1 scale-110 shadow-md !opacity-100' : 'opacity-65 hover:opacity-100'
                                     }`}
@@ -1964,7 +2060,7 @@ export default function App() {
 
                     setActiveDateKey(null);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer ${isReadOnlyView ? 'hidden' : ''}`}
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Clear All Rows</span>
@@ -1975,7 +2071,7 @@ export default function App() {
                   onClick={() => setActiveDateKey(null)}
                   className={`px-5 py-2 ${currentThemeStyle.color} text-white font-bold rounded-xl shadow-md hover:scale-102 transition-all cursor-pointer text-xs`}
                 >
-                  Save & Apply Done
+                  {isReadOnlyView ? 'Close Viewer' : 'Save & Apply Done'}
                 </button>
               </footer>
             </motion.div>
@@ -2274,6 +2370,129 @@ export default function App() {
                   className={`px-4 py-2 text-xs font-bold text-white ${currentThemeStyle.color} rounded-xl shadow-md hover:opacity-90 transition-all cursor-pointer`}
                 >
                   Close & Apply
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showShareModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden animate-fadeIn">
+            {/* Backdrop Blur overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowShareModal(false);
+                setIsCopied(false);
+              }}
+              className="absolute inset-0 bg-[#0f172a]/70 backdrop-blur-md"
+            />
+
+            {/* Modal Dialog Content Container */}
+            <motion.div
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 flex flex-col gap-4 font-sans text-slate-800"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-indigo-55 bg-indigo-50 rounded-xl text-indigo-600">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 font-display">
+                      Share Public Calendar
+                    </h3>
+                    <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">
+                      Read-Only Link Customizer
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setIsCopied(false);
+                  }}
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  <X className="w-4.5 h-4.5" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-50/70 border border-slate-100 rounded-xl space-y-2">
+                <p className="text-xs font-semibold text-slate-600 leading-relaxed">
+                  Generate a public URL. Employees and guests who visit this URL can view the live interactive calendar, but they will be <strong className="text-slate-900">completely restricted</strong> from editing memo values, switching week starts, and applying edits.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10.5px] font-black text-slate-400 uppercase tracking-wider block">
+                  Public Guest Access URl
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?readonly=true` : ''}
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).select();
+                    }}
+                    className="flex-1 text-xs font-mono font-bold bg-[#f8fafc] border border-slate-200 focus:border-slate-350 outline-hidden rounded-xl px-3.5 py-3 text-slate-700 select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?readonly=true` : '';
+                      navigator.clipboard.writeText(shareUrl).then(() => {
+                        setIsCopied(true);
+                        setTimeout(() => setIsCopied(false), 2500);
+                      });
+                    }}
+                    className={`px-4 rounded-xl text-xs font-bold font-sans transition-all flex items-center gap-1.5 shrink-0 select-none cursor-pointer ${
+                      isCopied 
+                        ? 'bg-emerald-600 text-white shadow-emerald-100' 
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
+                    }`}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Link2 className="w-4 h-4" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-1.5">
+                <a
+                  href={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?readonly=true` : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-3 text-xs font-bold text-center text-slate-600 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 rounded-xl transition-all select-none"
+                >
+                  Open Live Preview
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setIsCopied(false);
+                  }}
+                  className={`flex-1 py-3 text-xs font-bold text-white rounded-xl transition-all shadow-md hover:opacity-90 cursor-pointer ${currentThemeStyle.color}`}
+                >
+                  Done
                 </button>
               </div>
             </motion.div>
