@@ -1064,34 +1064,32 @@ export default function App() {
               <p className="text-sm text-[#64748b] font-semibold mt-0.5">
                 {calendarTitle || "Productivity Planner & Federal Holidays"}
               </p>
-              
-              {/* Publicly Visible Links requested by the user */}
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <a
-                  href="https://clock.payrollservers.us/#/clock/web/login"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 bg-slate-55 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-3 py-1 rounded-full text-[11px] font-bold transition-all shadow-3xs"
-                  title="Open Employee Time Clock in a new tab"
-                >
-                  <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Employee Time Clock</span>
-                </a>
-                <a
-                  href="chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://drive.usercontent.google.com/download?id=1rhIiyrdYWVvk-zDir-AHS5FAYMx9V5eS&authuser=3&acrobatPromotionSource=gdrive_chrome-list"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-3 py-1 rounded-full text-[11px] font-bold transition-all shadow-3xs"
-                  title="Open Employee Handbook in a new tab"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Employee Handbook</span>
-                </a>
-              </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            {/* Highly apparent External Resource Links */}
+            <a
+              href="https://clock.payrollservers.us/#/clock/web/login"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-sky-50 border border-sky-200 hover:bg-sky-100/80 hover:border-sky-300 rounded-xl text-sky-700 hover:text-sky-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
+              title="Open Employee Time Clock in a new tab"
+            >
+              <Clock className="w-4 h-4 text-sky-500" />
+              <span>Time Clock ↗</span>
+            </a>
+            
+            <a
+              href="https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300 rounded-xl text-emerald-700 hover:text-emerald-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
+              title="Open Employee Handbook in a new tab"
+            >
+              <BookOpen className="w-4 h-4 text-emerald-600" />
+              <span>Employee Handbook ↗</span>
+            </a>
             {/* Auto-saved indicator - Hidden in read-only view */}
             {!isReadOnlyView && (
               <div className="text-right hidden xl:block">
@@ -1560,30 +1558,6 @@ export default function App() {
                 </div>
                 <div className={`text-[10px] ${currentThemeStyle.text} font-bold uppercase tracking-wider mt-1 hidden print:block font-mono`}>
                   Federal Holidays: {showHolidays ? "ENABLED" : "MUTED"}
-                </div>
-
-                {/* Publicly Visible Links across from Month/Year in the Canvas itself */}
-                <div className="flex flex-wrap items-center gap-2 mt-2.5 print:hidden">
-                  <a
-                    href="https://clock.payrollservers.us/#/clock/web/login"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-full text-[10.5px] font-bold transition-all shadow-3xs"
-                    title="Open Employee Time Clock in a new tab"
-                  >
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span>Time Clock</span>
-                  </a>
-                  <a
-                    href="chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://drive.usercontent.google.com/download?id=1rhIiyrdYWVvk-zDir-AHS5FAYMx9V5eS&authuser=3&acrobatPromotionSource=gdrive_chrome-list"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 bg-[#f1f5f9]/80 hover:bg-[#cbd5e1]/50 border border-slate-200 text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-full text-[10.5px] font-bold transition-all shadow-3xs"
-                    title="Open Employee Handbook in a new tab"
-                  >
-                    <BookOpen className="w-3 h-3 text-slate-500" />
-                    <span>Handbook</span>
-                  </a>
                 </div>
               </div>
 
@@ -2273,35 +2247,42 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Quick Actions (All On/Off) */}
+              {/* Quick Actions (All On/Off) - Disabled or hidden when read-only */}
               <div className="flex items-center justify-between gap-2 text-xs border-b border-slate-100 pb-3">
                 <span className="text-[11px] text-slate-500 font-semibold">
                   Active in calendar: <span className="font-bold text-slate-850">{holidayCounts.active} / {holidayCounts.total}</span>
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDisabledHolidays([]);
-                      localStorage.setItem('calendar_disabled_holidays_v1', JSON.stringify([]));
-                    }}
-                    className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-all cursor-pointer"
-                  >
-                    Enable All
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const allNames = getExtendedHolidaysOfCurrentYear().map(h => h.name);
-                      setDisabledHolidays(allNames);
-                      localStorage.setItem('calendar_disabled_holidays_v1', JSON.stringify(allNames));
-                    }}
-                    className="text-[10.5px] font-bold text-rose-500 hover:text-rose-700 hover:underline transition-all cursor-pointer"
-                  >
-                    Disable All
-                  </button>
-                </div>
+                {!isReadOnlyView && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDisabledHolidays([]);
+                        localStorage.setItem('calendar_disabled_holidays_v1', JSON.stringify([]));
+                      }}
+                      className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-all cursor-pointer"
+                    >
+                      Enable All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allNames = getExtendedHolidaysOfCurrentYear().map(h => h.name);
+                        setDisabledHolidays(allNames);
+                        localStorage.setItem('calendar_disabled_holidays_v1', JSON.stringify(allNames));
+                      }}
+                      className="text-[10.5px] font-bold text-rose-500 hover:text-rose-700 hover:underline transition-all cursor-pointer"
+                    >
+                      Disable All
+                    </button>
+                  </div>
+                )}
+                {isReadOnlyView && (
+                  <span className="text-[10.5px] font-bold text-slate-400 italic">
+                    Read-Only Mode
+                  </span>
+                )}
               </div>
 
               {/* Scrollable Holiday List container */}
@@ -2315,11 +2296,13 @@ export default function App() {
                   return (
                     <div
                       key={`list_holiday_${h.name}`}
-                      onClick={() => toggleHolidayEnabled(h.name)}
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none ${
-                        isEnabled
-                          ? 'bg-white border-slate-200 hover:bg-slate-50/50'
-                          : 'bg-slate-50/60 border-slate-100 text-slate-400 opacity-60'
+                      onClick={() => !isReadOnlyView && toggleHolidayEnabled(h.name)}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all select-none ${
+                        isReadOnlyView
+                          ? (isEnabled ? 'bg-white border-slate-200' : 'bg-slate-50/60 border-slate-100 text-slate-400 opacity-60')
+                          : (isEnabled
+                              ? 'bg-white border-slate-200 hover:bg-slate-50/50 cursor-pointer'
+                              : 'bg-slate-50/60 border-slate-100 text-slate-400 opacity-60 cursor-pointer')
                       }`}
                     >
                       <div className="flex flex-col gap-1 pr-4">
@@ -2341,23 +2324,33 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* Small Toggle Switch */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleHolidayEnabled(h.name);
-                        }}
-                        className={`w-9 h-5 rounded-full relative transition-colors ${
-                          isEnabled ? currentThemeStyle.color : 'bg-slate-200'
-                        }`}
-                      >
-                        <span
-                          className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.75 left-0.75 transition-transform ${
-                            isEnabled ? 'translate-x-4' : 'translate-x-0'
+                      {/* Small Toggle Switch / Read Only status toggle display */}
+                      {!isReadOnlyView ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleHolidayEnabled(h.name);
+                          }}
+                          className={`w-9 h-5 rounded-full relative transition-colors ${
+                            isEnabled ? currentThemeStyle.color : 'bg-slate-200'
                           }`}
-                        />
-                      </button>
+                        >
+                          <span
+                            className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.75 left-0.75 transition-transform ${
+                              isEnabled ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      ) : (
+                        <span className={`text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg border leading-none ${
+                          isEnabled
+                            ? 'bg-emerald-50 border-emerald-150 text-emerald-700'
+                            : 'bg-slate-100 border-slate-150 text-slate-400'
+                        }`}>
+                          {isEnabled ? "Visible" : "Hidden"}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -2369,7 +2362,7 @@ export default function App() {
                   onClick={() => setShowHolidayListModal(false)}
                   className={`px-4 py-2 text-xs font-bold text-white ${currentThemeStyle.color} rounded-xl shadow-md hover:opacity-90 transition-all cursor-pointer`}
                 >
-                  Close & Apply
+                  {isReadOnlyView ? 'Close' : 'Close & Apply'}
                 </button>
               </div>
             </motion.div>
