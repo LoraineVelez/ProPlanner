@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { saveCalendarStateToFirestore, subscribeToCalendarState } from './utils/firebase';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -452,18 +453,219 @@ export default function App() {
 
   const [showHolidayListModal, setShowHolidayListModal] = useState(false);
 
-  // Public Read-Only State & Public Sharing Customization
-  const [isReadOnlyView, setIsReadOnlyView] = useState(false);
+  // Syncing state tracking
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Public Read-Only State & Public Sharing Customization - initialized synchronously
+  const [isReadOnlyView, setIsReadOnlyView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('readonly') === 'true' || params.get('view') === 'public' || params.get('mode') === 'readonly';
+    }
+    return false;
+  });
   const [showShareModal, setShowShareModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
+  // Synchronize state from database
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const isPublic = params.get('readonly') === 'true' || params.get('view') === 'public' || params.get('mode') === 'readonly';
-      setIsReadOnlyView(isPublic);
+    let unsubscribe: () => void = () => {};
+
+    if (isReadOnlyView) {
+      // In guest mode, subscribe to real-time changes
+      unsubscribe = subscribeToCalendarState((serverData) => {
+        if (serverData) {
+          if (serverData.calendarTitle !== undefined) setCalendarTitle(serverData.calendarTitle);
+          if (serverData.timeClockUrl !== undefined) setTimeClockUrl(serverData.timeClockUrl);
+          if (serverData.handbookUrl !== undefined) setHandbookUrl(serverData.handbookUrl);
+          if (serverData.currentYear !== undefined) setCurrentYear(Number(serverData.currentYear));
+          if (serverData.currentMonth !== undefined) setCurrentMonth(Number(serverData.currentMonth));
+          if (serverData.showHolidays !== undefined) setShowHolidays(!!serverData.showHolidays);
+          if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
+          if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
+          if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
+          if (serverData.statusKeys !== undefined) setStatusKeys(serverData.statusKeys);
+          if (serverData.statusLabels !== undefined) setStatusLabels(serverData.statusLabels);
+          if (serverData.statusColors !== undefined) setStatusColors(serverData.statusColors);
+          if (serverData.companyHolidays !== undefined) setCompanyHolidays(serverData.companyHolidays);
+          if (serverData.disabledHolidays !== undefined) setDisabledHolidays(serverData.disabledHolidays);
+          if (serverData.dayRows !== undefined) setDayRows(serverData.dayRows);
+        }
+        setDataLoaded(true);
+      }, (err) => {
+        console.error("Firestore listening failed:", err);
+        setDataLoaded(true);
+      });
+    } else {
+      // In editor mode, fetch once to initialize state and populate DB if empty
+      async function initData() {
+        try {
+          const response = await fetch("/api/calendar-state");
+          let serverData: any = null;
+          if (response.ok) {
+            serverData = await response.json();
+          }
+          const hasServerRows = serverData && serverData.dayRows && Object.keys(serverData.dayRows).length > 0;
+          
+          if (hasServerRows || (serverData && Object.keys(serverData).length > 0)) {
+            if (serverData.calendarTitle !== undefined) setCalendarTitle(serverData.calendarTitle);
+            if (serverData.timeClockUrl !== undefined) setTimeClockUrl(serverData.timeClockUrl);
+            if (serverData.handbookUrl !== undefined) setHandbookUrl(serverData.handbookUrl);
+            if (serverData.currentYear !== undefined) setCurrentYear(Number(serverData.currentYear));
+            if (serverData.currentMonth !== undefined) setCurrentMonth(Number(serverData.currentMonth));
+            if (serverData.showHolidays !== undefined) setShowHolidays(!!serverData.showHolidays);
+            if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
+            if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
+            if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
+            if (serverData.statusKeys !== undefined) setStatusKeys(serverData.statusKeys);
+            if (serverData.statusLabels !== undefined) setStatusLabels(serverData.statusLabels);
+            if (serverData.statusColors !== undefined) setStatusColors(serverData.statusColors);
+            if (serverData.companyHolidays !== undefined) setCompanyHolidays(serverData.companyHolidays);
+            if (serverData.disabledHolidays !== undefined) setDisabledHolidays(serverData.disabledHolidays);
+            if (serverData.dayRows !== undefined) setDayRows(serverData.dayRows);
+
+            // Seed it into Firestore so both client and server are consistent!
+            await saveCalendarStateToFirestore(serverData);
+          } else {
+            // First run migration: Send whatever resides in LocalStorage or defaults to populate Firestore
+            const localTitle = localStorage.getItem('calendar_title_v2') || "PTO & Live Coverage Planner";
+            const localClock = localStorage.getItem('calendar_time_clock_url_v1') || 'https://clock.payrollservers.us/#/clock/web/login';
+            const localHandbook = localStorage.getItem('calendar_handbook_url_v1') || 'https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing';
+            
+            const localKeysRaw = localStorage.getItem('calendar_status_keys_v3');
+            const localKeys = localKeysRaw ? JSON.parse(localKeysRaw) : ['pto', 'gap', 'critical', 'covered', 'purple'];
+            
+            const localLabelsRaw = localStorage.getItem('calendar_status_labels_v3');
+            const localLabels = localLabelsRaw ? JSON.parse(localLabelsRaw) : {
+              pto: 'PTO',
+              gap: 'GAP',
+              critical: 'CRITICAL',
+              covered: 'COVERED',
+              purple: 'PURPLE'
+            };
+            
+            const localColorsRaw = localStorage.getItem('calendar_status_colors_v2');
+            const localColors = localColorsRaw ? JSON.parse(localColorsRaw) : {
+              pto: 'emerald',
+              gap: 'amber',
+              critical: 'rose',
+              covered: 'sky',
+              purple: 'purple'
+            };
+            
+            const localHolidaysRaw = localStorage.getItem('calendar_company_holidays_v2');
+            const localHolidays = localHolidaysRaw ? JSON.parse(localHolidaysRaw) : {};
+            
+            const localDisabledRaw = localStorage.getItem('calendar_disabled_holidays_v1');
+            const localDisabled = localDisabledRaw ? JSON.parse(localDisabledRaw) : [];
+            
+            const localRowsRaw = localStorage.getItem('calendar_rows_v2');
+            const localRows = localRowsRaw ? JSON.parse(localRowsRaw) : {};
+            
+            const initialSyncPayload = {
+              calendarTitle: localTitle,
+              timeClockUrl: localClock,
+              handbookUrl: localHandbook,
+              currentYear: 2026,
+              currentMonth: 4,
+              showHolidays: true,
+              weekStartsOn: 'Sunday',
+              activeThemeId: 'charcoal',
+              fontSize: 'sm',
+              statusKeys: localKeys,
+              statusLabels: localLabels,
+              statusColors: localColors,
+              companyHolidays: localHolidays,
+              disabledHolidays: localDisabled,
+              dayRows: localRows
+            };
+
+            await saveCalendarStateToFirestore(initialSyncPayload);
+            // Also notify local mock server
+            await fetch("/api/calendar-state", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(initialSyncPayload)
+            });
+          }
+        } catch (err) {
+          console.error("Initial load failed:", err);
+        } finally {
+          setDataLoaded(true);
+        }
+      }
+      initData();
     }
-  }, []);
+
+    return () => unsubscribe();
+  }, [isReadOnlyView]);
+
+  // Centralized auto-sync of changes to server (throttled/debounced to avoid spamming writes)
+  useEffect(() => {
+    if (!dataLoaded || isReadOnlyView) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const payload = {
+          calendarTitle,
+          timeClockUrl,
+          handbookUrl,
+          currentYear,
+          currentMonth,
+          showHolidays,
+          weekStartsOn,
+          activeThemeId,
+          fontSize,
+          statusKeys,
+          statusLabels,
+          statusColors,
+          companyHolidays,
+          disabledHolidays,
+          dayRows
+        };
+
+        setIsSaving(true);
+        // Save to Firestore!
+        await saveCalendarStateToFirestore(payload);
+
+        // Also update local file cache fallback as background task
+        await fetch("/api/calendar-state", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        const now = new Date();
+        setSavedTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      } catch (err) {
+        console.error("Auto-sync failed:", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    dataLoaded,
+    isReadOnlyView,
+    calendarTitle,
+    timeClockUrl,
+    handbookUrl,
+    currentYear,
+    currentMonth,
+    showHolidays,
+    weekStartsOn,
+    activeThemeId,
+    fontSize,
+    statusKeys,
+    statusLabels,
+    statusColors,
+    companyHolidays,
+    disabledHolidays,
+    dayRows
+  ]);
 
   // Undo/Redo States for dayRows
   const [pastStates, setPastStates] = useState<Record<string, CalendarRow[]>[]>([]);
@@ -1027,6 +1229,20 @@ export default function App() {
     }
     return { ptoCount, gapCount, criticalCount, coveredCount, purpleCount };
   };
+
+  if (!dataLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-55 bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" />
+          <h2 className="text-sm font-bold text-slate-800 tracking-tight">Syncing Live Calendar State...</h2>
+          <p className="text-xs text-slate-500 leading-normal font-medium">
+            Fetching the latest employee schedules, company holidays, and layout configurations from the server.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const stats = getCoverageStats();
 

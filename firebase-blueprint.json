@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "CalendarState": {
+      "title": "CalendarState",
+      "description": "Entire application state for the PTO and Coverage Planner",
+      "type": "object",
+      "properties": {
+        "calendarTitle": { "type": "string", "description": "The title of the planner" },
+        "timeClockUrl": { "type": "string", "description": "The dynamic link to the Employee Time Clock" },
+        "handbookUrl": { "type": "string", "description": "The dynamic link to the Employee Handbook" },
+        "currentYear": { "type": "number", "description": "Active displayed year" },
+        "currentMonth": { "type": "number", "description": "Active displayed month index (0-11)" },
+        "showHolidays": { "type": "boolean", "description": "Whether company and federal holidays are visible" },
+        "weekStartsOn": { "type": "string", "description": "Start day of the week ('Sunday' or 'Monday')" },
+        "activeThemeId": { "type": "string", "description": "Identifier for the active theme" },
+        "fontSize": { "type": "string", "description": "Visual font size style of the cell items" },
+        "statusKeys": { "type": "array", "description": "All active status type keys" },
+        "statusLabels": { "type": "object", "description": "Object mapping keys to customized string labels" },
+        "statusColors": { "type": "object", "description": "Object mapping keys to customized Tailwind colors" },
+        "companyHolidays": { "type": "object", "description": "Object tracking custom holidays mapped by date key" },
+        "disabledHolidays": { "type": "array", "description": "Array of standard holiday names disabled by user" },
+        "dayRows": { "type": "object", "description": "Core cell grid schedules and color classes mapped by date key" }
+      },
+      "required": [
+        "calendarTitle",
+        "timeClockUrl",
+        "handbookUrl",
+        "statusKeys",
+        "statusLabels",
+        "statusColors",
+        "dayRows"
+      ]
+    }
+  },
+  "firestore": {
+    "/calendars/{calendarId}": {
+      "schema": "CalendarState",
+      "description": "Collection storing shared calendar planner states"
+    }
+  }
+}
