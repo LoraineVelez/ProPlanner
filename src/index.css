@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Custom Print styles */
+@media print {
+  /* Hide typical browser page decoration like URLs and timestamps */
+  @page {
+    size: landscape;
+    margin: 8mm 12mm;
+  }
+
+  body {
+    background-color: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 11pt;
+  }
+
+  /* Force solid lines on print for clear calendar grid gridlines */
+  .print-border {
+    border: 1px solid #1f2937 !important;
+  }
+
+  .print-border-b {
+    border-bottom: 1px solid #1f2937 !important;
+  }
+
+  /* Set printing container layouts */
+  .print-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Force grid heights on print to use full-page layout */
+  .print-grid-day {
+    min-height: 5.5rem !important;
+    height: auto !important;
+    background-color: white !important;
+  }
+}

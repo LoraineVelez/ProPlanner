@@ -1,0 +1,6 @@
+{
+  "name": "Monthly Calendar",
+  "description": "A monthly calendar featuring US Federal Holidays, customizable daily notes, automatic saving, and clean print/PDF layouts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
