@@ -297,6 +297,19 @@ export default function App() {
   // Custom title to render on print
   const [calendarTitle, setCalendarTitle] = useState("PTO & Live Coverage Planner");
 
+  // External link destinations with localStorage persistence
+  const [timeClockUrl, setTimeClockUrl] = useState(() => {
+    return localStorage.getItem('calendar_time_clock_url_v1') || 'https://clock.payrollservers.us/#/clock/web/login';
+  });
+  const [handbookUrl, setHandbookUrl] = useState(() => {
+    return localStorage.getItem('calendar_handbook_url_v1') || 'https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing';
+  });
+  const [editingLinkKey, setEditingLinkKey] = useState<'clock' | 'handbook' | null>(null);
+  const [tempLinkValue, setTempLinkValue] = useState("");
+
+  // Sidebar Tab: settings vs employee links
+  const [sidebarTab, setSidebarTab] = useState<'settings' | 'links'>('settings');
+
   // Options states
   const [showHolidays, setShowHolidays] = useState(true);
   const [weekStartsOn, setWeekStartsOn] = useState<'Sunday' | 'Monday'>('Sunday');
@@ -1030,6 +1043,24 @@ export default function App() {
              <div className="title-group">
               <h1 className="text-[26px] font-medium tracking-tight text-[#0f172a] font-display leading-tight flex flex-wrap items-center gap-4">
                 <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl print:hidden">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="p-1.5 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
+                    title="Previous Month"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="p-1.5 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
+                    title="Next Month"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 {!isReadOnlyView && (
                   <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
                     <button
@@ -1068,28 +1099,32 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            {/* Highly apparent External Resource Links */}
-            <a
-              href="https://clock.payrollservers.us/#/clock/web/login"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-sky-50 border border-sky-200 hover:bg-sky-100/80 hover:border-sky-300 rounded-xl text-sky-700 hover:text-sky-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
-              title="Open Employee Time Clock in a new tab"
-            >
-              <Clock className="w-4 h-4 text-sky-500" />
-              <span>Time Clock ↗</span>
-            </a>
-            
-            <a
-              href="https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300 rounded-xl text-emerald-700 hover:text-emerald-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
-              title="Open Employee Handbook in a new tab"
-            >
-              <BookOpen className="w-4 h-4 text-emerald-600" />
-              <span>Employee Handbook ↗</span>
-            </a>
+            {/* Highly apparent External Resource Links - Shown in Header only on public guest view */}
+            {isReadOnlyView && (
+              <>
+                <a
+                  href={timeClockUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-sky-50 border border-sky-200 hover:bg-sky-100/80 hover:border-sky-300 rounded-xl text-sky-700 hover:text-sky-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
+                  title="Open Employee Time Clock in a new tab"
+                >
+                  <Clock className="w-4 h-4 text-sky-500" />
+                  <span>Time Clock ↗</span>
+                </a>
+                
+                <a
+                  href={handbookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100/80 hover:border-emerald-300 rounded-xl text-emerald-700 hover:text-emerald-850 hover:underline transition-all cursor-pointer text-xs font-bold shadow-3xs"
+                  title="Open Employee Handbook in a new tab"
+                >
+                  <BookOpen className="w-4 h-4 text-emerald-600" />
+                  <span>Employee Handbook ↗</span>
+                </a>
+              </>
+            )}
             {/* Auto-saved indicator - Hidden in read-only view */}
             {!isReadOnlyView && (
               <div className="text-right hidden xl:block">
@@ -1163,8 +1198,38 @@ export default function App() {
           {/* Calendar Sidebar Settings Desk - Hidden on PDF Print */}
           {!isReadOnlyView && (
             <section id="sidebar_settings" className="print:hidden lg:col-span-1 space-y-5">
-            
-            {/* Month & Year Navigation Card */}
+              
+              {/* Sidebar Tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-1 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab('settings')}
+                  className={`flex-1 py-1.5 text-xs font-bold text-center rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    sidebarTab === 'settings'
+                      ? 'bg-white text-slate-800 shadow-3xs font-black'
+                      : 'text-slate-500 hover:text-slate-800 font-semibold'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Planner Tools</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab('links')}
+                  className={`flex-1 py-1.5 text-xs font-bold text-center rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    sidebarTab === 'links'
+                      ? 'bg-white text-slate-800 shadow-3xs font-black'
+                      : 'text-slate-500 hover:text-slate-800 font-semibold'
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Employee Links</span>
+                </button>
+              </div>
+
+              {sidebarTab === 'settings' ? (
+                <>
+                  {/* Month & Year Navigation Card */}
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)] space-y-4">
               <h2 className="text-xs font-medium tracking-wider uppercase text-[#94a3b8] font-display">
                 Planner Navigation
@@ -1536,6 +1601,185 @@ export default function App() {
               </div>
             </div>
 
+                </>
+              ) : (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Links Manager Card */}
+                  <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.03)] space-y-4">
+                    <h2 className="text-xs font-medium tracking-wider uppercase text-[#94a3b8] font-display flex items-center gap-1.5">
+                      <Link2 className={`w-3.5 h-3.5 ${currentThemeStyle.text}`} />
+                      <span>Employee Resource Links</span>
+                    </h2>
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                      Configure and test external corporate URLs. These links will be visible to employees on the public guest calendar header.
+                    </p>
+
+                    <div className="space-y-5 pt-2">
+                      {/* Link #1: Time Clock */}
+                      <div className="space-y-2 pb-4 border-b border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">
+                            Employee Time Clock Link
+                          </span>
+                          {editingLinkKey !== 'clock' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLinkKey('clock');
+                                setTempLinkValue(timeClockUrl);
+                              }}
+                              className="p-1 hover:bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-md text-slate-500 hover:text-slate-850 cursor-pointer transition-all flex items-center gap-1 text-[10px] font-bold"
+                            >
+                              <Pencil className="w-3 h-3 text-slate-400" />
+                              <span>Edit Link</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {editingLinkKey === 'clock' ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={tempLinkValue}
+                              onChange={(e) => setTempLinkValue(e.target.value)}
+                              className={`w-full text-xs font-mono bg-[#f8fafc] border border-slate-200 rounded-lg p-2.5 outline-hidden ${currentThemeStyle.focusBorder} font-bold`}
+                              placeholder="https://..."
+                              autoFocus
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTimeClockUrl(tempLinkValue);
+                                  localStorage.setItem('calendar_time_clock_url_v1', tempLinkValue);
+                                  setEditingLinkKey(null);
+                                  // trigger custom auto-save notification
+                                  setIsSaving(true);
+                                  setTimeout(() => {
+                                    setIsSaving(false);
+                                    setSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                                  }, 200);
+                                }}
+                                className={`flex-1 py-1.5 px-3 text-xs font-bold text-white rounded-lg transition-all shadow-3xs cursor-pointer ${currentThemeStyle.color}`}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingLinkKey(null)}
+                                className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="px-3 py-2 bg-slate-50 rounded-lg text-[11px] font-mono text-slate-600 truncate border border-slate-100" title={timeClockUrl}>
+                              {timeClockUrl}
+                            </div>
+                            <a
+                              href={timeClockUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-100 text-sky-700 hover:text-sky-850 hover:underline rounded-lg text-[11px] font-bold transition-all cursor-pointer w-full justify-center shadow-3xs"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-sky-500" />
+                              <span>Open / Test Time Clock ↗</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Link #2: Employee Handbook */}
+                      <div className="space-y-2 pb-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">
+                            Employee Handbook Link
+                          </span>
+                          {editingLinkKey !== 'handbook' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLinkKey('handbook');
+                                setTempLinkValue(handbookUrl);
+                              }}
+                              className="p-1 hover:bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-md text-slate-500 hover:text-slate-850 cursor-pointer transition-all flex items-center gap-1 text-[10px] font-bold"
+                            >
+                              <Pencil className="w-3 h-3 text-slate-400" />
+                              <span>Edit Link</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {editingLinkKey === 'handbook' ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={tempLinkValue}
+                              onChange={(e) => setTempLinkValue(e.target.value)}
+                              className={`w-full text-xs font-mono bg-[#f8fafc] border border-slate-200 rounded-lg p-2.5 outline-hidden ${currentThemeStyle.focusBorder} font-bold`}
+                              placeholder="https://..."
+                              autoFocus
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHandbookUrl(tempLinkValue);
+                                  localStorage.setItem('calendar_handbook_url_v1', tempLinkValue);
+                                  setEditingLinkKey(null);
+                                  // trigger custom auto-save notification
+                                  setIsSaving(true);
+                                  setTimeout(() => {
+                                    setIsSaving(false);
+                                    setSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                                  }, 200);
+                                }}
+                                className={`flex-1 py-1.5 px-3 text-xs font-bold text-white rounded-lg transition-all shadow-3xs cursor-pointer ${currentThemeStyle.color}`}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingLinkKey(null)}
+                                className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="px-3 py-2 bg-slate-50 rounded-lg text-[11px] font-mono text-slate-600 truncate border border-slate-100" title={handbookUrl}>
+                              {handbookUrl}
+                            </div>
+                            <a
+                              href={handbookUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 text-emerald-700 hover:text-emerald-850 hover:underline rounded-lg text-[11px] font-bold transition-all cursor-pointer w-full justify-center shadow-3xs"
+                            >
+                              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Open / Test Handbook ↗</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* Informative tips */}
+                  <div className="bg-[#f0fdf4] border border-emerald-100 rounded-2xl p-4.5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.01)] flex gap-3 text-emerald-800">
+                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div className="text-[11px] leading-relaxed font-semibold">
+                      Your link edits auto-save. Employees accessing the <span className="font-extrabold underline">Shared Public link</span> will see these identical resources directly in their header!
+                    </div>
+                  </div>
+                </div>
+              )}
+
           </section>
           )}
 
@@ -1547,6 +1791,24 @@ export default function App() {
               <div className="flex-1">
                 <h2 className="text-3xl font-medium font-display text-[#0f172a] tracking-tight flex flex-wrap items-center gap-3 print:text-3.5xl">
                   <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-150 p-0.5 rounded-xl print:hidden">
+                    <button
+                      type="button"
+                      onClick={handlePrevMonth}
+                      className="p-1 rounded bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 shadow-3xs cursor-pointer transition-all"
+                      title="Previous Month"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextMonth}
+                      className="p-1 rounded bg-white hover:bg-slate-150/10 hover:bg-slate-100 text-slate-700 hover:text-slate-900 shadow-3xs cursor-pointer transition-all"
+                      title="Next Month"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                   {isReadOnlyView && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-[10px] font-bold uppercase tracking-wider print:hidden shadow-3xs">
                       Read-Only View
