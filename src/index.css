@@ -12,7 +12,7 @@
   /* Hide typical browser page decoration like URLs and timestamps */
   @page {
     size: landscape;
-    margin: 8mm 12mm;
+    margin: 6mm 10mm !important;
   }
 
   body {
@@ -25,26 +25,89 @@
 
   /* Force solid lines on print for clear calendar grid gridlines */
   .print-border {
-    border: 1px solid #1f2937 !important;
+    border: 1px solid #cbd5e1 !important;
   }
 
   .print-border-b {
-    border-bottom: 1px solid #1f2937 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
   }
 
-  /* Set printing container layouts */
-  .print-container {
-    padding: 0 !important;
-    margin: 0 !important;
+  /* Robust and beautiful master container logic to ensure SINGLE page print outcomes */
+  .print-calendar-container {
+    width: 100% !important;
     max-width: 100% !important;
+    height: auto !important;
+    max-height: 98vh !important;
     box-shadow: none !important;
     border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
-  /* Force grid heights on print to use full-page layout */
-  .print-grid-day {
-    min-height: 5.5rem !important;
+  .print-calendar-header {
+    padding: 10px 0 !important;
+    border-bottom: 2px solid #cbd5e1 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .print-calendar-weeks {
+    background-color: #f8fafc !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .print-calendar-grid {
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr) !important;
+    background-color: #e2e8f0 !important;
+    gap: 1px !important;
     height: auto !important;
+    flex: 1 1 auto !important;
+  }
+
+  /* Override desktop heights to let them fit on a single landscape page comfortably */
+  .print-calendar-day {
+    min-height: 5.2rem !important;
+    height: auto !important;
+    padding: 4px 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
     background-color: white !important;
+    border: 1px solid #e2e8f0 !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Ensure text sizing on print is incredibly clean and compact to prevent spills */
+  .print-calendar-day .text-\[15px\] {
+    font-size: 13px !important;
+  }
+
+  .print-calendar-day .sm\:text-\[16\.5px\] {
+    font-size: 13px !important;
+  }
+
+  .print-calendar-day .mt-2 {
+    margin-top: 2px !important;
+    gap: 2px !important;
+  }
+
+  /* Force standard height for scheduling rows inside cells during print */
+  .print-calendar-day div[class*="h-"] {
+    height: 18px !important;
+    line-height: 18px !important;
+    font-size: 8.5px !important;
+    padding-top: 0px !important;
+    padding-bottom: 0px !important;
+  }
+
+  /* Adjust background & border coloring on print */
+  .print-calendar-day span[class*="bg-"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

@@ -1475,10 +1475,10 @@ export default function App() {
           </section>
 
           {/* Calendar Master Canvas */}
-          <section className="lg:col-span-3 bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] overflow-hidden print:border-none print:shadow-none print:m-0 print:p-0">
+          <section className="lg:col-span-3 bg-white border border-[#e2e8f0] rounded-2xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] overflow-hidden print:border-none print:shadow-none print:m-0 print:p-0 print-calendar-container">
             
             {/* Header Title block - Displays beautifully and matches the timeanddate layout */}
-            <div className="bg-white p-6 border-b border-[#e2e8f0] print:py-4 print:px-0 flex items-center justify-between gap-4">
+            <div className="bg-white p-6 border-b border-[#e2e8f0] print:py-4 print:px-0 flex items-center justify-between gap-4 print-calendar-header">
               <div className="flex-1">
                 <h2 className="text-3xl font-medium font-display text-[#0f172a] tracking-tight flex items-center gap-3 print:text-3.5xl">
                   <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
@@ -1512,7 +1512,7 @@ export default function App() {
             </div>
 
             {/* Weeks displays - Day Columns header */}
-            <div className="grid grid-cols-7 bg-[#f1f5f9] border-b border-[#e2e8f0] print:bg-transparent print-border-b">
+            <div className="grid grid-cols-7 bg-[#f1f5f9] border-b border-[#e2e8f0] print:bg-transparent print-border-b print-calendar-weeks">
               {weekDays.map((day) => (
                 <div 
                   key={day} 
@@ -1525,7 +1525,7 @@ export default function App() {
             </div>
 
             {/* Days Cells Grid */}
-            <div className="grid grid-cols-7 bg-[#e2e8f0] gap-[1px] print:bg-transparent print-border">
+            <div className="grid grid-cols-7 bg-[#e2e8f0] gap-[1px] print:bg-transparent print-border print-calendar-grid">
               
               {calendarDays.map((day, index) => {
                 const customHoliday = companyHolidays[day.dateKey];
@@ -1565,7 +1565,7 @@ export default function App() {
                     onClick={() => setActiveDateKey(day.dateKey)}
                     className={`${rowSizeStyles[fontSize].dayMinHeight} p-2 sm:p-2.5 leading-tight flex flex-col justify-between transition-all group relative cursor-pointer border border-transparent ${bgStyle} ${
                       isActiveDayEditing ? `ring-2 ${currentThemeStyle.ring} ${currentThemeStyle.bg} z-10` : ''
-                    } print:border ${printBgStyle}`}
+                    } print:border ${printBgStyle} print-calendar-day`}
                   >
                     {/* Grid Day Indicators: weekday + day number */}
                     <div className="flex items-start justify-between gap-1 select-none">
