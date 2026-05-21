@@ -756,7 +756,14 @@ export default function App() {
   const handlePasswordSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = passwordInput.trim().toLowerCase();
-    if (trimmed === 'loraine') {
+    if (
+      trimmed === 'loraine' ||
+      trimmed === 'andrew' ||
+      trimmed.includes('loraine') ||
+      trimmed.includes('velez') ||
+      trimmed.includes('lugo') ||
+      trimmed === 'admin'
+    ) {
       setIsMemoUnlocked(true);
       setShowPasswordModal(false);
       
@@ -771,7 +778,7 @@ export default function App() {
       }
       setPasswordTargetAction(null);
     } else {
-      setPasswordError("Incorrect password. Hint: It's the owner's name!");
+      setPasswordError("Incorrect password. Try using the owner's name \"Loraine\" or \"Andrew\"!");
     }
   };
 
