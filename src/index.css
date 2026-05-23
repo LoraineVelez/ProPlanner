@@ -145,7 +145,7 @@
   .print-calendar-day {
     min-height: 0 !important;
     height: 100% !important;
-    padding: 5px 6px !important;
+    padding: 3px 4px !important; /* Compact cell padding to prevent cropping */
     display: flex !important;
     flex-direction: column !important;
     justify-content: space-between !important;
@@ -180,28 +180,30 @@
 
   .print-calendar-day .text-\[15px\],
   .print-calendar-day .sm\:text-\[16\.5px\] {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
     font-weight: 800 !important;
     line-height: 1 !important;
   }
 
   .print-calendar-day .mt-2 {
-    margin-top: 2px !important;
-    gap: 2.5px !important;
+    margin-top: 1.5px !important;
+    gap: 1.5px !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   /* PTO / Live Coverage indicator rows within a calendar day cell */
-  .print-calendar-day div[class*="h-"] {
-    height: 17px !important;
-    line-height: 17px !important;
+  .print-calendar-day .print-calendar-day-row {
+    height: 14px !important; /* Compact row size for reliable 4-line fit on PDF generation */
+    line-height: 14px !important;
     font-size: 8px !important;
     padding-top: 0px !important;
     padding-bottom: 0px !important;
-    padding-left: 5px !important;
-    padding-right: 5px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
     font-weight: 700 !important;
-    border-radius: 4px !important;
-    margin-bottom: 1.5px !important;
+    border-radius: 3px !important;
+    margin-bottom: 1px !important;
   }
 
   /* Subtle indicator circles next to day numbers */

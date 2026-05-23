@@ -3968,7 +3968,7 @@ export default function App() {
                         return (
                           <div 
                             key={`cell_${day.dateKey}_r_${rIdx}`} 
-                            className={`${rowSizeStyles[fontSize].height} ${rowSizeStyles[fontSize].padding} ${rowSizeStyles[fontSize].text} font-semibold rounded-md flex items-center justify-between transition-all truncate ${rBg}`}
+                            className={`print-calendar-day-row ${rowSizeStyles[fontSize].height} ${rowSizeStyles[fontSize].padding} ${rowSizeStyles[fontSize].text} font-semibold rounded-md flex items-center justify-between transition-all truncate ${rBg}`}
                           >
                             <span className="truncate">
                               {row.text || <span className={`text-slate-300/40 ${rowSizeStyles[fontSize].emptyIndicator} font-normal group-hover:text-slate-300 print:hidden`}>—</span>}
