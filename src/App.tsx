@@ -59,6 +59,16 @@ interface CalendarTheme {
 }
 
 const THEMES: CalendarTheme[] = [
+  {
+    id: 'indigo',
+    name: 'Company Blue',
+    primary: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+    accentText: 'text-indigo-950',
+    accentBg: 'bg-indigo-50 border-indigo-200',
+    borderFocus: 'focus-within:border-indigo-600',
+    badge: 'bg-indigo-50 text-indigo-800 border-indigo-100',
+    banner: 'bg-indigo-50 border-indigo-100 text-indigo-950'
+  },
   { 
     id: 'charcoal', 
     name: 'Charcoal', 
@@ -100,23 +110,13 @@ const THEMES: CalendarTheme[] = [
     banner: 'bg-rose-50 border-rose-100 text-rose-950'
   },
   {
-    id: 'indigo',
-    name: 'Indigo',
-    primary: 'bg-indigo-600 hover:bg-indigo-700 text-white',
-    accentText: 'text-indigo-950',
-    accentBg: 'bg-indigo-50 border-indigo-200',
-    borderFocus: 'focus-within:border-indigo-600',
-    badge: 'bg-indigo-50 text-indigo-800 border-indigo-100',
-    banner: 'bg-indigo-50 border-indigo-100 text-indigo-950'
-  },
-  {
     id: 'orange',
     name: 'Orange',
     primary: 'bg-amber-600 hover:bg-amber-700 text-white',
     accentText: 'text-amber-950',
     accentBg: 'bg-amber-50 border-amber-200',
     borderFocus: 'focus-within:border-amber-600',
-    badge: 'bg-amber-50 text-amber-850 border-amber-100',
+    badge: 'bg-amber-50 text-amber-855 border-amber-100',
     banner: 'bg-amber-50 border-amber-100 text-amber-950'
   }
 ];
@@ -485,8 +485,14 @@ export default function App() {
   // Options states
   const [showHolidays, setShowHolidays] = useState(true);
   const [weekStartsOn, setWeekStartsOn] = useState<'Sunday' | 'Monday'>('Sunday');
-  const [activeThemeId, setActiveThemeId] = useState('charcoal');
+  const [activeThemeId, setActiveThemeId] = useState('indigo');
   const [fontSize, setFontSize] = useState<'xs' | 'sm' | 'base'>('sm');
+  const [scheduleDuration, setScheduleDuration] = useState<'month' | '1week' | '2weeks'>('month');
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+
+  useEffect(() => {
+    setCurrentWeekOffset(0);
+  }, [scheduleDuration]);
   
   // Saving indicators
   const [isSaving, setIsSaving] = useState(false);
@@ -511,6 +517,9 @@ export default function App() {
 
   const [isEditingCalendarName, setIsEditingCalendarName] = useState(false);
   const [tempCalendarInput, setTempCalendarInput] = useState("");
+
+  const [isEditingManagerName, setIsEditingManagerName] = useState(false);
+  const [tempManagerNameInput, setTempManagerNameInput] = useState("");
 
   const [isEditingManagerPassword, setIsEditingManagerPassword] = useState(false);
   const [tempPasswordInput, setTempPasswordInput] = useState("");
@@ -702,8 +711,9 @@ export default function App() {
               currentMonth: 4,
               showHolidays: true,
               weekStartsOn: 'Sunday',
-              activeThemeId: 'charcoal',
+              activeThemeId: 'indigo',
               fontSize: 'sm',
+              scheduleDuration: 'month',
               statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
               statusLabels: { 
                 time_off: 'Time Off', 
@@ -740,28 +750,44 @@ export default function App() {
         }
         setDashboardCalendars(combined);
 
-        // Resolve Pending Slug if we came in through a clean path URL
-        if (pendingSlug) {
-          const matched = combined.find(c => {
-            if (slugifyCompare(c.calendarTitle || "", pendingSlug)) return true;
-            
-            const segments = pendingSlug.split('/');
-            if (segments.length >= 2) {
-              const teamSlug = segments[0];
-              const calSlug = segments[1].replace('-viewonly', '');
-              const matchedTeamAndCal = slugifyCompare(c.teamName || "", teamSlug) && slugifyCompare(c.calendarName || "", calSlug);
-              if (matchedTeamAndCal) return true;
+        // First check if we have a valid calendarId query parameter in search
+        let resolvedFromId = false;
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const queryId = params.get('calendarId');
+          if (queryId) {
+            const matchedById = combined.find(c => c.id === queryId);
+            if (matchedById) {
+              setActiveCalendarId(matchedById.id);
+              resolvedFromId = true;
             }
-            return false;
-          });
-          if (matched) {
-            setActiveCalendarId(matched.id);
-          } else {
-            // Fallback or clear if path slug didn't match anything
+          }
+        }
+
+        if (!resolvedFromId) {
+          // Resolve Pending Slug if we came in through a clean path URL
+          if (pendingSlug) {
+            const matched = combined.find(c => {
+              if (slugifyCompare(c.calendarTitle || "", pendingSlug)) return true;
+              
+              const segments = pendingSlug.split('/');
+              if (segments.length >= 2) {
+                const teamSlug = segments[0];
+                const calSlug = segments[1].replace('-viewonly', '');
+                const matchedTeamAndCal = slugifyCompare(c.teamName || "", teamSlug) && slugifyCompare(c.calendarName || "", calSlug);
+                if (matchedTeamAndCal) return true;
+              }
+              return false;
+            });
+            if (matched) {
+              setActiveCalendarId(matched.id);
+            } else {
+              // Fallback or clear if path slug didn't match anything
+              setActiveCalendarId(null);
+            }
+          } else if (activeCalendarId === "PENDING_PATH_RESOLUTION") {
             setActiveCalendarId(null);
           }
-        } else if (activeCalendarId === "PENDING_PATH_RESOLUTION") {
-          setActiveCalendarId(null);
         }
 
         setDashboardLoading(false);
@@ -823,6 +849,7 @@ export default function App() {
         if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
         if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
         if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
+        if (serverData.scheduleDuration !== undefined) setScheduleDuration(serverData.scheduleDuration as 'month' | '1week' | '2weeks');
         // Active calendar keys/labels loaded from DB
         let keys = serverData.statusKeys || [];
         let labels = serverData.statusLabels || {};
@@ -898,6 +925,7 @@ export default function App() {
           weekStartsOn,
           activeThemeId,
           fontSize,
+          scheduleDuration,
           statusKeys,
           statusLabels,
           statusColors,
@@ -949,7 +977,8 @@ export default function App() {
     companyHolidays,
     disabledHolidays,
     dayRows,
-    managerName
+    managerName,
+    scheduleDuration
   ]);
 
   // Undo/Redo States for dayRows
@@ -1346,6 +1375,70 @@ export default function App() {
     }
   };
 
+  const getWeekCountForMonth = (yr: number, mo: number) => {
+    const daysInActiveMonth = new Date(yr, mo + 1, 0).getDate();
+    const firstDayOfActiveMonth = new Date(yr, mo, 1);
+    let startOffset = firstDayOfActiveMonth.getDay();
+    if (weekStartsOn === 'Monday') {
+      startOffset = (startOffset + 6) % 7;
+    }
+    const totalCurrentLength = startOffset + daysInActiveMonth;
+    const remainingSlots = (7 - (totalCurrentLength % 7)) % 7;
+    return (totalCurrentLength + remainingSlots) / 7;
+  };
+
+  const handlePrevPeriod = () => {
+    if (scheduleDuration === 'month') {
+      handlePrevMonth();
+      setCurrentWeekOffset(0);
+    } else {
+      if (currentWeekOffset > 0) {
+        setCurrentWeekOffset(prev => prev - 1);
+      } else {
+        const prevMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
+        const prevMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+        const tempCells = getWeekCountForMonth(prevMonthYear, prevMonthIndex);
+        
+        if (currentMonth === 0) {
+          if (currentYear > 2025) {
+            setCurrentMonth(11);
+            setCurrentYear(prev => prev - 1);
+            const targetOffset = scheduleDuration === '2weeks' ? Math.max(0, tempCells - 2) : tempCells - 1;
+            setCurrentWeekOffset(targetOffset);
+          }
+        } else {
+          setCurrentMonth(prev => prev - 1);
+          const targetOffset = scheduleDuration === '2weeks' ? Math.max(0, tempCells - 2) : tempCells - 1;
+          setCurrentWeekOffset(targetOffset);
+        }
+      }
+    }
+  };
+
+  const handleNextPeriod = () => {
+    if (scheduleDuration === 'month') {
+      handleNextMonth();
+      setCurrentWeekOffset(0);
+    } else {
+      const totalWeeks = Math.ceil(buildCalendarCells().length / 7);
+      const maxOffset = scheduleDuration === '2weeks' ? Math.max(0, totalWeeks - 2) : totalWeeks - 1;
+      if (currentWeekOffset < maxOffset) {
+        setCurrentWeekOffset(prev => prev + 1);
+      } else {
+        if (currentMonth === 11) {
+          if (currentYear < 2035) {
+            setCurrentMonth(0);
+            setCurrentYear(prev => prev + 1);
+            setCurrentWeekOffset(0);
+          }
+        } else {
+          setCurrentMonth(prev => prev + 1);
+          setCurrentWeekOffset(0);
+        }
+      }
+    }
+  };
+
   const openResetConfirm = () => {
     const n1 = Math.floor(Math.random() * 8) + 3; // 3 to 10
     const n2 = Math.floor(Math.random() * 8) + 3; // 3 to 10
@@ -1485,6 +1578,35 @@ export default function App() {
 
   const miniCalendarData = getNextMonthMiniData();
   const calendarDays = buildCalendarCells();
+  const totalWeeks = Math.ceil(calendarDays.length / 7);
+  const maxOffset = scheduleDuration === '2weeks' ? Math.max(0, totalWeeks - 2) : totalWeeks - 1;
+  const activeOffset = Math.min(currentWeekOffset, maxOffset);
+
+  const displayedDays = scheduleDuration === '1week'
+    ? calendarDays.slice(activeOffset * 7, (activeOffset + 1) * 7)
+    : scheduleDuration === '2weeks'
+    ? calendarDays.slice(activeOffset * 7, (activeOffset + 2) * 7)
+    : calendarDays;
+
+  const getDisplayedRangeLabel = () => {
+    if (scheduleDuration === 'month') {
+      return `${MONTH_NAMES[currentMonth]} ${currentYear}`;
+    }
+    if (displayedDays.length === 0) return '';
+    const firstDay = displayedDays[0];
+    const lastDay = displayedDays[displayedDays.length - 1];
+    
+    const firstMonName = MONTH_NAMES[firstDay.month].substring(0, 3);
+    const lastMonName = MONTH_NAMES[lastDay.month].substring(0, 3);
+    
+    if (firstDay.month === lastDay.month && firstDay.year === lastDay.year) {
+      return `${MONTH_NAMES[firstDay.month]} ${firstDay.dayNumber} – ${lastDay.dayNumber}, ${firstDay.year}`;
+    } else if (firstDay.year === lastDay.year) {
+      return `${firstMonName} ${firstDay.dayNumber} – ${lastMonName} ${lastDay.dayNumber}, ${firstDay.year}`;
+    } else {
+      return `${firstMonName} ${firstDay.dayNumber || 1}, ${firstDay.year} – ${lastMonName} ${lastDay.dayNumber || 1}, ${lastDay.year}`;
+    }
+  };
   const weekDays = weekStartsOn === 'Sunday' ? WEEKDAY_NAMES_SUN : WEEKDAY_NAMES_MON;
 
   // Calculates stats of active month planning parameters
@@ -1524,7 +1646,7 @@ export default function App() {
         currentMonth: 4,
         showHolidays: true,
         weekStartsOn: 'Sunday',
-        activeThemeId: 'charcoal',
+        activeThemeId: 'indigo',
         fontSize: 'sm',
         statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
         statusLabels: {
@@ -1566,6 +1688,20 @@ export default function App() {
         teamName: newTeam,
         calendarName: newCal,
         calendarTitle: combined
+      });
+      const updated = await fetchAllCalendars();
+      setDashboardCalendars(updated);
+    }
+  };
+
+  const handleUpdateManagerName = async (newName: string) => {
+    const sanitized = newName.trim();
+    if (!sanitized) return;
+    setManagerName(sanitized);
+    localStorage.setItem('current_manager_name', sanitized);
+    if (activeCalendarId) {
+      await saveCalendarStateToFirestore(activeCalendarId, {
+        managerName: sanitized
       });
       const updated = await fetchAllCalendars();
       setDashboardCalendars(updated);
@@ -1781,11 +1917,6 @@ export default function App() {
   };
 
   const renderDashboardPlanner = () => {
-    // Check if there is pre-existing browser state they can convert
-    const hasLocalPlannerState = typeof localStorage !== 'undefined' && (
-      localStorage.getItem('calendar_rows_v2') || localStorage.getItem('calendar_title_v2')
-    );
-
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-indigo-100">
         {/* Sleek Traditional Top Navigation Header */}
@@ -1821,27 +1952,6 @@ export default function App() {
           className="flex-1 max-w-5xl w-full mx-auto p-6 sm:p-10 space-y-8"
         >
           
-          {/* Import Browser Backup banner */}
-          {hasLocalPlannerState && (
-            <div className="p-5 bg-indigo-50 border border-indigo-150 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-indigo-950 flex items-center gap-1.5 leading-none">
-                  <Sparkles className="w-4 h-4 text-indigo-500" />
-                  Convert local computer schedule to cloud calendar!
-                </h3>
-                <p className="text-xs text-indigo-850 leading-relaxed font-semibold">
-                  We found an existing schedule offline on this local web browser. Let's upload it to a brand new shared calendar workspace instantly so other managers can access it remotely!
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleImportLocalStorage}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer active:scale-95"
-              >
-                Upload Offline Calendar
-              </button>
-            </div>
-          )}
 
           {/* Welcome Display Card */}
           <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white rounded-3xl p-8 shadow-3xs relative overflow-hidden">
@@ -1956,7 +2066,7 @@ export default function App() {
                           }}
                           className="w-full sm:w-auto px-4 py-2 bg-zinc-900 hover:bg-slate-800 hover:shadow-xs text-white text-xs font-bold rounded-xl transition-all cursor-pointer text-center active:scale-95 shadow-4xs shrink-0"
                         >
-                          Edit Calendar
+                          Manager Access
                         </button>
                       </div>
                     </motion.div>
@@ -2150,7 +2260,7 @@ export default function App() {
                         currentMonth: 4,
                         showHolidays: true,
                         weekStartsOn: 'Sunday',
-                        activeThemeId: 'charcoal',
+                        activeThemeId: 'indigo',
                         fontSize: 'sm',
                         statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
                         statusLabels: { 
@@ -2600,12 +2710,12 @@ export default function App() {
                {/* Month and toggle actions */}
                <div className="mt-2.5 flex flex-wrap items-center gap-3">
                  <span className="text-xs font-bold text-slate-700 bg-slate-100/80 px-2.5 py-1 rounded-lg">
-                   {MONTH_NAMES[currentMonth]} {currentYear}
+                   {getDisplayedRangeLabel()}
                  </span>
                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-xl print:hidden">
                    <button
                      type="button"
-                     onClick={handlePrevMonth}
+                     onClick={handlePrevPeriod}
                      className="p-1 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
                      title="Previous Month"
                    >
@@ -2613,9 +2723,9 @@ export default function App() {
                    </button>
                    <button
                      type="button"
-                     onClick={handleNextMonth}
+                     onClick={handleNextPeriod}
                      className="p-1 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
-                     title="Next Month"
+                     title="Next"
                    >
                      <ChevronRight className="w-3.5 h-3.5" />
                    </button>
@@ -2718,7 +2828,7 @@ export default function App() {
                 title="Go back to Team Coverage Planning Home"
               >
                 <Home className="w-4 h-4 text-indigo-400" />
-                <span>Back Home</span>
+                <span>Home</span>
               </button>
             )}
 
@@ -2809,24 +2919,21 @@ export default function App() {
               
               <div className="flex items-center justify-between gap-2">
                 <button
-                  onClick={handlePrevMonth}
+                  onClick={handlePrevPeriod}
                   className="p-2 bg-[#f1f5f9] hover:bg-[#e2e8f0] rounded-xl transition-all cursor-pointer text-slate-700"
-                  title="Previous Month"
+                  title="Previous"
                 >
                   <ChevronLeft className="w-4.5 h-4.5" />
                 </button>
                 <div className="text-center">
-                  <span className="block font-black text-[#1e293b] font-display text-sm tracking-tight">
-                    {MONTH_NAMES[currentMonth]}
-                  </span>
-                  <span className="block text-[11px] font-mono text-[#64748b] font-extrabold mt-0.5">
-                    {currentYear}
+                  <span className="block font-black text-[#1e293b] font-display text-xs sm:text-xs tracking-tight line-clamp-2 max-w-[150px]">
+                    {getDisplayedRangeLabel()}
                   </span>
                 </div>
                 <button
-                  onClick={handleNextMonth}
+                  onClick={handleNextPeriod}
                   className="p-2 bg-[#f1f5f9] hover:bg-[#e2e8f0] rounded-xl transition-all cursor-pointer text-slate-700"
-                  title="Next Month"
+                  title="Next"
                 >
                   <ChevronRight className="w-4.5 h-4.5" />
                 </button>
@@ -2838,7 +2945,10 @@ export default function App() {
                   <label className="block text-[10px] font-bold text-[#94a3b8] uppercase mb-1">Month</label>
                   <select
                     value={currentMonth}
-                    onChange={(e) => setCurrentMonth(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      setCurrentMonth(parseInt(e.target.value));
+                      setCurrentWeekOffset(0);
+                    }}
                     className="w-full text-xs font-bold bg-[#f8fafc] border border-[#e2e8f0] cursor-pointer rounded-lg p-2 focus:outline-hidden focus:border-indigo-500 text-slate-700"
                   >
                     {MONTH_NAMES.map((m, i) => (
@@ -2850,7 +2960,10 @@ export default function App() {
                   <label className="block text-[10px] font-bold text-[#94a3b8] uppercase mb-1">Year</label>
                   <select
                     value={currentYear}
-                    onChange={(e) => setCurrentYear(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      setCurrentYear(parseInt(e.target.value));
+                      setCurrentWeekOffset(0);
+                    }}
                     className="w-full text-xs font-bold bg-[#f8fafc] border border-[#e2e8f0] cursor-pointer rounded-lg p-2 focus:outline-hidden focus:border-indigo-500 text-slate-700"
                   >
                     {Array.from({ length: 11 }, (_, i) => 2025 + i).map((y) => (
@@ -3032,15 +3145,15 @@ export default function App() {
                       key={theme.id}
                       onClick={() => setActiveThemeId(theme.id)}
                       type="button"
-                      className={`w-7 h-7 rounded-full shrink-0 transition-transform cursor-pointer relative ${colorBadgeClass} ${
+                      className={`w-5 h-5 rounded-full shrink-0 transition-transform cursor-pointer relative ${colorBadgeClass} ${
                         isThemeSelected 
-                          ? `ring-4 ring-offset-1 ${dotColorTheme.ring} scale-110 shadow-xs` 
+                          ? `ring-2.5 ring-offset-1 ${dotColorTheme.ring} scale-110 shadow-xs` 
                           : 'hover:scale-105 border border-slate-200'
                       }`}
                       title={`${theme.name} Theme`}
                     >
                       {isThemeSelected && (
-                        <span className="absolute inset-0 flex items-center justify-center text-white text-[11px] font-black">
+                        <span className="absolute inset-0 flex items-center justify-center text-white text-[8.5px] font-black">
                           ✓
                         </span>
                       )}
@@ -3102,6 +3215,29 @@ export default function App() {
                       }`}
                     >
                       {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Schedule duration selector */}
+              <div>
+                <label className="block text-xs font-bold text-[#334155] mb-2">
+                  Schedule View Duration
+                </label>
+                <div className="grid grid-cols-3 gap-1 bg-[#f1f5f9] p-1 rounded-xl text-center">
+                  {(['month', '1week', '2weeks'] as const).map((dur) => (
+                    <button
+                      key={dur}
+                      type="button"
+                      onClick={() => setScheduleDuration(dur)}
+                      className={`text-[9.5px] uppercase tracking-wide font-extrabold py-1.5 rounded-lg transition-all cursor-pointer truncate ${
+                        scheduleDuration === dur
+                          ? 'bg-white text-[#1e293b] shadow-xs font-black'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {dur === 'month' ? 'Full Month' : dur === '1week' ? '1 Week' : '2 Weeks'}
                     </button>
                   ))}
                 </div>
@@ -3247,6 +3383,75 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setIsEditingCalendarName(false)}
+                        className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Manager Name row */}
+                <div className="flex flex-col p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 pr-2">
+                      <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Manager Name</span>
+                      {!isEditingManagerName && (
+                        <span className="text-xs font-bold text-slate-800 truncate block">{managerName || "Residential Manager"}</span>
+                      )}
+                    </div>
+                    {!isEditingManagerName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempManagerNameInput(managerName || "Residential Manager");
+                          setIsEditingManagerName(true);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                        title="Edit Manager Name"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingManagerName && (
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={tempManagerNameInput}
+                        onChange={(e) => setTempManagerNameInput(e.target.value)}
+                        className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:outline-none rounded-lg text-slate-800"
+                        placeholder="Manager Name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (tempManagerNameInput.trim()) {
+                              handleUpdateManagerName(tempManagerNameInput.trim());
+                              setIsEditingManagerName(false);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setIsEditingManagerName(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tempManagerNameInput.trim()) {
+                            handleUpdateManagerName(tempManagerNameInput.trim());
+                            setIsEditingManagerName(false);
+                          }
+                        }}
+                        className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all"
+                        title="Save"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingManagerName(false)}
                         className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
                         title="Cancel"
                       >
@@ -3575,21 +3780,21 @@ export default function App() {
             <div className="bg-white p-6 border-b border-[#e2e8f0] print:py-4 print:px-0 flex items-center justify-between gap-4 print-calendar-header">
               <div className="flex-1">
                 <h2 className="text-3xl font-medium font-display text-[#0f172a] tracking-tight flex flex-wrap items-center gap-3 print:text-3.5xl">
-                  <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
+                  <span>{getDisplayedRangeLabel()}</span>
                   <div className="flex items-center gap-1 bg-slate-50 border border-slate-150 p-0.5 rounded-xl print:hidden">
                     <button
                       type="button"
-                      onClick={handlePrevMonth}
+                      onClick={handlePrevPeriod}
                       className="p-1 rounded bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 shadow-3xs cursor-pointer transition-all"
-                      title="Previous Month"
+                      title="Previous"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      onClick={handleNextMonth}
+                      onClick={handleNextPeriod}
                       className="p-1 rounded bg-white hover:bg-slate-150/10 hover:bg-slate-100 text-slate-700 hover:text-slate-900 shadow-3xs cursor-pointer transition-all"
-                      title="Next Month"
+                      title="Next"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -3644,7 +3849,7 @@ export default function App() {
             {/* Days Cells Grid */}
             <div className="grid grid-cols-7 bg-[#e2e8f0] gap-[1px] print-calendar-grid">
               
-              {calendarDays.map((day, index) => {
+              {displayedDays.map((day, index) => {
                 const customHoliday = companyHolidays[day.dateKey];
                 const holidayName = customHoliday?.name || masterHolidaysMap[day.dateKey] || '';
                 const isClosed = customHoliday?.closed || false;
@@ -4641,6 +4846,99 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 bg-slate-900/40 pointer-events-none" />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 sm:p-8 space-y-5 relative z-10 text-left"
+            >
+              <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-rose-600 font-display leading-tight">
+                    Delete Workspace
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wide">
+                    Irreversible Operation
+                  </p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] rounded-xl font-bold text-center leading-normal animate-none">
+                  {deleteError}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-600 leading-normal font-semibold animate-none">
+                This action is permanent and cannot be undone. Solve the steps below to confirm:
+              </p>
+
+              {/* Word verification step */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                  Type Verification Word: <span className="text-slate-800 select-all font-mono font-black text-xs">"{deleteWordChallenge}"</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={`Type "${deleteWordChallenge}" here...`}
+                  value={deleteWordInput}
+                  onChange={(e) => setDeleteWordInput(e.target.value)}
+                  className="w-full text-center text-xs px-4 py-3 bg-slate-50 border border-slate-200 focus:border-rose-450 focus:bg-white focus:outline-none rounded-xl font-bold tracking-widest text-slate-800 uppercase"
+                  autoFocus
+                />
+              </div>
+
+              {/* Math answer step */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                  Math Problem: <span className="text-slate-850 font-black text-xs">What is {deleteMathChallenge.n1} + {deleteMathChallenge.n2}?</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter calculation result..."
+                  value={deleteMathInput}
+                  onChange={(e) => setDeleteMathInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleExecuteDeleteWorkspace();
+                    }
+                  }}
+                  className="w-full text-center text-xs px-4 py-3 bg-slate-50 border border-slate-200 focus:border-rose-450 focus:bg-white focus:outline-none rounded-xl font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="w-1/2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeleteWorkspace}
+                  className="w-1/2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer text-center shadow-4xs"
+                >
+                  Delete Workspace
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
