@@ -688,17 +688,9 @@ export default function App() {
         let targetCal = list.find(c => c.calendarTitle === "Team Coverage" && c.managerName === "John Smith");
         
         if (!targetCal && list.length > 0) {
-          // Check if there is any database item we can migrate to the correct owner/title
-          const other = list[0];
-          targetCal = {
-            ...other,
-            calendarTitle: "Team Coverage",
-            managerName: "John Smith"
-          };
-          await saveCalendarStateToFirestore(other.id, {
-            calendarTitle: "Team Coverage",
-            managerName: "John Smith"
-          }).catch(() => {});
+          // If "Team Coverage" / "John Smith" is not found, but we have other workspaces (e.g., Leasing, etc.),
+          // simply default to the first workspace in the list without overwriting its properties in Firestore!
+          targetCal = list[0];
         }
 
         if (!targetCal) {
@@ -856,8 +848,29 @@ export default function App() {
         let colors = serverData.statusColors || {};
         let rows = serverData.dayRows || {};
 
-        const hasLegacy = keys.includes('pto') || keys.includes('gap') || keys.includes('critical') || keys.includes('covered') || keys.includes('purple') || keys.includes('flex') || keys.length > 4 || keys.length === 0;
-        if (hasLegacy) {
+        const hasLegacy = keys.length > 0 && (
+          keys.includes('pto') || 
+          keys.includes('gap') || 
+          keys.includes('critical') || 
+          keys.includes('covered') || 
+          keys.includes('flex')
+        );
+
+        if (keys.length === 0) {
+          keys = ['time_off', 'flex_time', 'label_3', 'label_4'];
+          labels = {
+            time_off: 'Time Off',
+            flex_time: 'Flex Time',
+            label_3: 'Label 3',
+            label_4: 'Label 4'
+          };
+          colors = {
+            time_off: 'sky',
+            flex_time: 'amber',
+            label_3: 'pink',
+            label_4: 'purple'
+          };
+        } else if (hasLegacy) {
           keys = ['time_off', 'flex_time', 'label_3', 'label_4'];
           labels = {
             time_off: 'Time Off',
