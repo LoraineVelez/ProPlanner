@@ -3824,6 +3824,26 @@ export default function App() {
                 <div className={`text-[10px] ${currentThemeStyle.text} font-bold uppercase tracking-wider mt-1 hidden print:block font-mono`}>
                   Federal Holidays: {showHolidays ? "ENABLED" : "MUTED"}
                 </div>
+                {isReadOnlyView && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3.5 pt-3 border-t border-slate-100 print:mt-2.5 print:pt-2">
+                    <span className="text-[10.5px] font-mono font-bold text-slate-400 uppercase tracking-widest select-none">
+                      Calendar Key:
+                    </span>
+                    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+                      {statusKeys.map((key) => {
+                        const currentLabel = statusLabels[key];
+                        const currentColor = statusColors[key] || 'slate';
+                        const activeColorOpt = COLOR_OPTIONS.find(o => o.id === currentColor) || COLOR_OPTIONS[0];
+                        return (
+                          <div key={`legend_key_${key}`} className="flex items-center gap-1.5 text-xs font-bold text-slate-700 print:text-black">
+                            <span className={`w-3 h-3 rounded-full shrink-0 ${activeColorOpt.dotBg} ring-1 ring-black/5`} />
+                            <span>{currentLabel}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Floating Miniature Next Month block matching screenshot EXACTLY */}
