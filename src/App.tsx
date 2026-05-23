@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { saveCalendarStateToFirestore, subscribeToCalendarState } from './utils/firebase';
+import { 
+  saveCalendarStateToFirestore, 
+  subscribeToCalendarState, 
+  fetchAllCalendars, 
+  createNewCalendar, 
+  deleteCalendar 
+} from './utils/firebase';
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -21,7 +27,8 @@ import {
   Redo,
   Clock,
   Share2,
-  Link2
+  Link2,
+  Home
 } from 'lucide-react';
 import { getUSFederalHolidays, formatDateKey } from './utils/holidays';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,6 +40,12 @@ const MONTH_NAMES = [
 
 const WEEKDAY_NAMES_SUN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WEEKDAY_NAMES_MON = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const RANDOM_VERIFICATION_WORDS = [
+  'FLAMINGO', 'BLOSSOM', 'HARBOR', 'HORIZON', 'EMBER', 'AURORA', 
+  'BREEZE', 'SUNSET', 'OASIS', 'VALLEY', 'MEADOW', 'SUMMIT', 
+  'SPECTRUM', 'CRYSTAL', 'GALAXY', 'NEBULA', 'COSMOS'
+];
 
 interface CalendarTheme {
   id: string;
@@ -290,13 +303,171 @@ function getDayAfterThanksgiving(year: number): string {
   return '';
 }
 
+const slugifyCasePreserving = (text: string) => {
+  return text
+    .toString()
+    .trim()
+    .replace(/\s+/g, '-')                     // Replace spaces with -
+    .replace(/[^a-zA-Z0-9\-]/g, '');          // Remove any other odd characters
+};
+
+const slugifyCompare = (title1: string, title2: string) => {
+  const s1 = (title1 || "").toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
+  const s2 = (title2 || "").toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
+  return s1 === s2 && s1 !== '';
+};
+
 export default function App() {
+  // Passwordless Ecosphere states
+  const [activeCalendarId, setActiveCalendarId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const queryId = params.get('calendarId');
+      if (queryId) return queryId;
+
+      const cleanPath = window.location.pathname.replace(/^\/|\/$/g, '');
+      const segments = cleanPath.split('/');
+      if (segments.length >= 2) {
+        return "PENDING_PATH_RESOLUTION";
+      }
+      if (segments.length === 1 && segments[0] !== "" && !segments[0].includes('.')) {
+        return "PENDING_PATH_RESOLUTION";
+      }
+    }
+    return null;
+  });
+
+  const [pendingSlug, setPendingSlug] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cleanPath = window.location.pathname.replace(/^\/|\/$/g, '');
+      const segments = cleanPath.split('/' );
+      if (segments.length >= 2) {
+        return cleanPath;
+      }
+      if (segments.length === 1 && segments[0] !== "" && !segments[0].includes('.')) {
+        return segments[0];
+      }
+    }
+    return null;
+  });
+  
+  // Dashboard state variables
+  const [dashboardCalendars, setDashboardCalendars] = useState<any[]>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [newCalendarTitle, setNewCalendarTitle] = useState("");
+
+  // Copy confirmation notification element
+  const [copiedNotificationUrl, setCopiedNotificationUrl] = useState<string | null>(null);
+
+  const renderCopiedToast = () => {
+    return (
+      <AnimatePresence>
+        {copiedNotificationUrl && (
+          <motion.div
+            key="copied-toast"
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-sm bg-slate-900 border border-slate-700/50 text-white rounded-2xl p-4 shadow-2xl flex flex-col gap-2.5 font-sans"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-xs font-bold text-white leading-none">
+                    Staff Access Link Copied!
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-1 font-semibold leading-relaxed">
+                    Send this link to workers to let them view live coverage in real-time.
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setCopiedNotificationUrl(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="bg-slate-950 px-3 py-2 rounded-xl flex items-center justify-between gap-2 border border-slate-800/80">
+              <span className="text-[10.5px] font-mono text-indigo-300 truncate select-all pr-2">
+                {copiedNotificationUrl}
+              </span>
+              <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 shrink-0 select-none">
+                Ready
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  };
+  
+  // Unlocked calendars tracking (stores IDs of calendars successfully authenticated)
+  const [unlockedCalendars, setUnlockedCalendars] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('mgmt_unlocked_calendars_v1');
+        return stored ? JSON.parse(stored) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  // Create Workspace Modal States
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createCalTitle, setCreateCalTitle] = useState("");
+  const [createCalPass, setCreateCalPass] = useState("");
+  const [createTeamSelector, setCreateTeamSelector] = useState("");
+  const [createCustomTeam, setCreateCustomTeam] = useState("");
+  const [createCalendarName, setCreateCalendarName] = useState("");
+  const [createManagerName, setCreateManagerName] = useState("");
+  const [createError, setCreateError] = useState("");
+
+  // Passcode Challenge Modal States
+  const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+  const [challengeCalId, setChallengeCalId] = useState("");
+  const [challengeCalTitle, setChallengeCalTitle] = useState("");
+  const [challengeCalPass, setChallengeCalPass] = useState("");
+  const [challengeError, setChallengeError] = useState("");
+
+  // Secure Random Word Confirmation States for Rename/Delete
+  const [isSecureConfirmOpen, setIsSecureConfirmOpen] = useState(false);
+  const [secureAction, setSecureAction] = useState<'rename' | 'delete' | null>(null);
+  const [proposedNewTitle, setProposedNewTitle] = useState("");
+  const [randomVerificationWord, setRandomVerificationWord] = useState("");
+  const [verificationInput, setVerificationInput] = useState("");
+  const [verificationError, setVerificationError] = useState("");
+
+  const markCalendarUnlocked = (calId: string) => {
+    setUnlockedCalendars(prev => {
+      const updated = { ...prev, [calId]: true };
+      localStorage.setItem('mgmt_unlocked_calendars_v1', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Manager profile state
+  const [managerName, setManagerName] = useState(() => {
+    return localStorage.getItem('current_manager_name') || '';
+  });
+  const [managerNameInput, setManagerNameInput] = useState("");
+  const [managerError, setManagerError] = useState("");
+
   // May 2026 is general target
   const [currentYear, setCurrentYear] = useState(2026);
   const [currentMonth, setCurrentMonth] = useState(4); 
   
   // Custom title to render on print
   const [calendarTitle, setCalendarTitle] = useState("PTO & Live Coverage Planner");
+  const [teamName, setTeamName] = useState("");
+  const [calendarName, setCalendarName] = useState("");
 
   // External link destinations with localStorage persistence
   const [timeClockUrl, setTimeClockUrl] = useState(() => {
@@ -334,17 +505,39 @@ export default function App() {
   const [mathAnswer, setMathAnswer] = useState("");
   const [resetScope, setResetScope] = useState<'month' | 'all'>('all');
 
+  // Inline editing states for Administration section
+  const [isEditingTeamName, setIsEditingTeamName] = useState(false);
+  const [tempTeamInput, setTempTeamInput] = useState("");
+
+  const [isEditingCalendarName, setIsEditingCalendarName] = useState(false);
+  const [tempCalendarInput, setTempCalendarInput] = useState("");
+
+  const [isEditingManagerPassword, setIsEditingManagerPassword] = useState(false);
+  const [tempPasswordInput, setTempPasswordInput] = useState("");
+
+  // Styled modal states for Delete Workspace
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteWordChallenge, setDeleteWordChallenge] = useState("");
+  const [deleteWordInput, setDeleteWordInput] = useState("");
+  const [deleteMathChallenge, setDeleteMathChallenge] = useState({ n1: 0, n2: 0, ans: 0 });
+  const [deleteMathInput, setDeleteMathInput] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
   // Dynamic custom status/memo keys
   const [statusKeys, setStatusKeys] = useState<string[]>(() => {
     const saved = localStorage.getItem('calendar_status_keys_v3');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.includes('pto') || parsed.includes('gap') || parsed.includes('flex')) {
+          return ['time_off', 'flex_time', 'label_3', 'label_4'];
+        }
+        return parsed;
       } catch (e) {
         console.error("Error parsing stored status keys", e);
       }
     }
-    return ['pto', 'gap', 'critical', 'covered', 'purple'];
+    return ['time_off', 'flex_time', 'label_3', 'label_4'];
   });
 
   // Password-protected Memo editing & dynamic changes
@@ -359,17 +552,25 @@ export default function App() {
     const saved = localStorage.getItem('calendar_status_labels_v3');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.pto !== undefined || parsed.gap !== undefined || parsed.flex !== undefined) {
+          return {
+            time_off: 'Time Off',
+            flex_time: 'Flex Time',
+            label_3: 'Label 3',
+            label_4: 'Label 4'
+          };
+        }
+        return parsed;
       } catch (e) {
         console.error("Error parsing stored status labels", e);
       }
     }
     return {
-      pto: 'PTO',
-      gap: 'GAP',
-      critical: 'CRITICAL',
-      covered: 'COVERED',
-      purple: 'PURPLE'
+      time_off: 'Time Off',
+      flex_time: 'Flex Time',
+      label_3: 'Label 3',
+      label_4: 'Label 4'
     };
   });
 
@@ -378,17 +579,25 @@ export default function App() {
     const saved = localStorage.getItem('calendar_status_colors_v2');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.pto !== undefined || parsed.gap !== undefined || parsed.flex !== undefined) {
+          return {
+            time_off: 'sky',
+            flex_time: 'amber',
+            label_3: 'pink',
+            label_4: 'purple'
+          };
+        }
+        return parsed;
       } catch (e) {
         console.error("Error parsing stored status colors", e);
       }
     }
     return {
-      pto: 'emerald',
-      gap: 'amber',
-      critical: 'rose',
-      covered: 'sky',
-      purple: 'purple'
+      time_off: 'sky',
+      flex_time: 'amber',
+      label_3: 'pink',
+      label_4: 'purple'
     };
   });
 
@@ -456,158 +665,231 @@ export default function App() {
   // Syncing state tracking
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Public Read-Only State & Public Sharing Customization - initialized synchronously
-  const [isReadOnlyView, setIsReadOnlyView] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('readonly') === 'true' || params.get('view') === 'public' || params.get('mode') === 'readonly';
-    }
-    return false;
-  });
+  // Public Read-Only State & Public Sharing Customization
+  const [isReadOnlyView, setIsReadOnlyView] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
-  // Synchronize state from database
+  // Fetch Dashboard Workspace list dynamically
   useEffect(() => {
-    let unsubscribe: () => void = () => {};
-
-    if (isReadOnlyView) {
-      // In guest mode, subscribe to real-time changes
-      unsubscribe = subscribeToCalendarState((serverData) => {
-        if (serverData) {
-          if (serverData.calendarTitle !== undefined) setCalendarTitle(serverData.calendarTitle);
-          if (serverData.timeClockUrl !== undefined) setTimeClockUrl(serverData.timeClockUrl);
-          if (serverData.handbookUrl !== undefined) setHandbookUrl(serverData.handbookUrl);
-          if (serverData.currentYear !== undefined) setCurrentYear(Number(serverData.currentYear));
-          if (serverData.currentMonth !== undefined) setCurrentMonth(Number(serverData.currentMonth));
-          if (serverData.showHolidays !== undefined) setShowHolidays(!!serverData.showHolidays);
-          if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
-          if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
-          if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
-          if (serverData.statusKeys !== undefined) setStatusKeys(serverData.statusKeys);
-          if (serverData.statusLabels !== undefined) setStatusLabels(serverData.statusLabels);
-          if (serverData.statusColors !== undefined) setStatusColors(serverData.statusColors);
-          if (serverData.companyHolidays !== undefined) setCompanyHolidays(serverData.companyHolidays);
-          if (serverData.disabledHolidays !== undefined) setDisabledHolidays(serverData.disabledHolidays);
-          if (serverData.dayRows !== undefined) setDayRows(serverData.dayRows);
+    setDashboardLoading(true);
+    fetchAllCalendars()
+      .then(async (list) => {
+        // Look for the correct Team Coverage calendar managed by John Smith
+        let targetCal = list.find(c => c.calendarTitle === "Team Coverage" && c.managerName === "John Smith");
+        
+        if (!targetCal && list.length > 0) {
+          // Check if there is any database item we can migrate to the correct owner/title
+          const other = list[0];
+          targetCal = {
+            ...other,
+            calendarTitle: "Team Coverage",
+            managerName: "John Smith"
+          };
+          await saveCalendarStateToFirestore(other.id, {
+            calendarTitle: "Team Coverage",
+            managerName: "John Smith"
+          }).catch(() => {});
         }
-        setDataLoaded(true);
-      }, (err) => {
-        console.error("Firestore listening failed:", err);
-        setDataLoaded(true);
-      });
-    } else {
-      // In editor mode, fetch once to initialize state and populate DB if empty
-      async function initData() {
-        try {
-          const response = await fetch("/api/calendar-state");
-          let serverData: any = null;
-          if (response.ok) {
-            serverData = await response.json();
-          }
-          const hasServerRows = serverData && serverData.dayRows && Object.keys(serverData.dayRows).length > 0;
-          
-          if (hasServerRows || (serverData && Object.keys(serverData).length > 0)) {
-            if (serverData.calendarTitle !== undefined) setCalendarTitle(serverData.calendarTitle);
-            if (serverData.timeClockUrl !== undefined) setTimeClockUrl(serverData.timeClockUrl);
-            if (serverData.handbookUrl !== undefined) setHandbookUrl(serverData.handbookUrl);
-            if (serverData.currentYear !== undefined) setCurrentYear(Number(serverData.currentYear));
-            if (serverData.currentMonth !== undefined) setCurrentMonth(Number(serverData.currentMonth));
-            if (serverData.showHolidays !== undefined) setShowHolidays(!!serverData.showHolidays);
-            if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
-            if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
-            if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
-            if (serverData.statusKeys !== undefined) setStatusKeys(serverData.statusKeys);
-            if (serverData.statusLabels !== undefined) setStatusLabels(serverData.statusLabels);
-            if (serverData.statusColors !== undefined) setStatusColors(serverData.statusColors);
-            if (serverData.companyHolidays !== undefined) setCompanyHolidays(serverData.companyHolidays);
-            if (serverData.disabledHolidays !== undefined) setDisabledHolidays(serverData.disabledHolidays);
-            if (serverData.dayRows !== undefined) setDayRows(serverData.dayRows);
 
-            // Seed it into Firestore so both client and server are consistent!
-            await saveCalendarStateToFirestore(serverData);
-          } else {
-            // First run migration: Send whatever resides in LocalStorage or defaults to populate Firestore
-            const localTitle = localStorage.getItem('calendar_title_v2') || "PTO & Live Coverage Planner";
-            const localClock = localStorage.getItem('calendar_time_clock_url_v1') || 'https://clock.payrollservers.us/#/clock/web/login';
-            const localHandbook = localStorage.getItem('calendar_handbook_url_v1') || 'https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing';
-            
-            const localKeysRaw = localStorage.getItem('calendar_status_keys_v3');
-            const localKeys = localKeysRaw ? JSON.parse(localKeysRaw) : ['pto', 'gap', 'critical', 'covered', 'purple'];
-            
-            const localLabelsRaw = localStorage.getItem('calendar_status_labels_v3');
-            const localLabels = localLabelsRaw ? JSON.parse(localLabelsRaw) : {
-              pto: 'PTO',
-              gap: 'GAP',
-              critical: 'CRITICAL',
-              covered: 'COVERED',
-              purple: 'PURPLE'
-            };
-            
-            const localColorsRaw = localStorage.getItem('calendar_status_colors_v2');
-            const localColors = localColorsRaw ? JSON.parse(localColorsRaw) : {
-              pto: 'emerald',
-              gap: 'amber',
-              critical: 'rose',
-              covered: 'sky',
-              purple: 'purple'
-            };
-            
-            const localHolidaysRaw = localStorage.getItem('calendar_company_holidays_v2');
-            const localHolidays = localHolidaysRaw ? JSON.parse(localHolidaysRaw) : {};
-            
-            const localDisabledRaw = localStorage.getItem('calendar_disabled_holidays_v1');
-            const localDisabled = localDisabledRaw ? JSON.parse(localDisabledRaw) : [];
-            
-            const localRowsRaw = localStorage.getItem('calendar_rows_v2');
-            const localRows = localRowsRaw ? JSON.parse(localRowsRaw) : {};
-            
-            const initialSyncPayload = {
-              calendarTitle: localTitle,
-              timeClockUrl: localClock,
-              handbookUrl: localHandbook,
+        if (!targetCal) {
+          try {
+            const defaultPayload = {
+              calendarTitle: "Team Coverage",
+              timeClockUrl: 'https://clock.payrollservers.us/#/clock/web/login',
+              handbookUrl: 'https://www.labor.ca.gov/',
               currentYear: 2026,
               currentMonth: 4,
               showHolidays: true,
               weekStartsOn: 'Sunday',
               activeThemeId: 'charcoal',
               fontSize: 'sm',
-              statusKeys: localKeys,
-              statusLabels: localLabels,
-              statusColors: localColors,
-              companyHolidays: localHolidays,
-              disabledHolidays: localDisabled,
-              dayRows: localRows
+              statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
+              statusLabels: { 
+                time_off: 'Time Off', 
+                flex_time: 'Flex Time', 
+                label_3: 'Label 3', 
+                label_4: 'Label 4' 
+              },
+              statusColors: { 
+                time_off: 'sky', 
+                flex_time: 'amber', 
+                label_3: 'pink', 
+                label_4: 'purple' 
+              },
+              companyHolidays: [],
+              disabledHolidays: [],
+              dayRows: {}
             };
-
-            await saveCalendarStateToFirestore(initialSyncPayload);
-            // Also notify local mock server
-            await fetch("/api/calendar-state", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(initialSyncPayload)
-            });
+            const newId = await createNewCalendar("John Smith", "Team Coverage", defaultPayload);
+            const freshList = await fetchAllCalendars();
+            const createdCal = freshList.find(c => c.id === newId);
+            if (createdCal) {
+              targetCal = createdCal;
+            }
+          } catch (seedErr) {
+            console.error("Failed to seed default Team Coverage workspace:", seedErr);
           }
-        } catch (err) {
-          console.error("Initial load failed:", err);
-        } finally {
-          setDataLoaded(true);
         }
+
+        // Put targetCal first, then append other calendars (no automatic delete!)
+        let combined = [...list];
+        if (targetCal) {
+          const others = list.filter(c => c.id !== targetCal.id);
+          combined = [targetCal, ...others];
+        }
+        setDashboardCalendars(combined);
+
+        // Resolve Pending Slug if we came in through a clean path URL
+        if (pendingSlug) {
+          const matched = combined.find(c => {
+            if (slugifyCompare(c.calendarTitle || "", pendingSlug)) return true;
+            
+            const segments = pendingSlug.split('/');
+            if (segments.length >= 2) {
+              const teamSlug = segments[0];
+              const calSlug = segments[1].replace('-viewonly', '');
+              const matchedTeamAndCal = slugifyCompare(c.teamName || "", teamSlug) && slugifyCompare(c.calendarName || "", calSlug);
+              if (matchedTeamAndCal) return true;
+            }
+            return false;
+          });
+          if (matched) {
+            setActiveCalendarId(matched.id);
+          } else {
+            // Fallback or clear if path slug didn't match anything
+            setActiveCalendarId(null);
+          }
+        } else if (activeCalendarId === "PENDING_PATH_RESOLUTION") {
+          setActiveCalendarId(null);
+        }
+
+        setDashboardLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error loading calendars list:", err);
+        setDashboardLoading(false);
+      });
+  }, [activeCalendarId, pendingSlug]);
+
+  // Synchronize isReadOnlyView state based strictly on url parameters or pathnames
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const forcedReadonly = params.get('readonly') === 'true' || params.get('view') === 'public' || params.get('mode') === 'readonly';
+      
+      const cleanPath = window.location.pathname.replace(/^\/|\/$/g, '');
+      const segments = cleanPath.split('/');
+      const isPathReadonly = segments.length >= 2 && (segments[1] === 'Coverage-Portal-viewonly' || segments[1] === 'Coverage-Planner-viewonly' || segments[1].endsWith('-viewonly'));
+
+      if (forcedReadonly || isPathReadonly) {
+        setIsReadOnlyView(true);
+        return;
       }
-      initData();
+    }
+    setIsReadOnlyView(false);
+  }, [activeCalendarId]);
+
+  // Subscribe to real-time updates for active calendar ID
+  useEffect(() => {
+    let unsubscribe: () => void = () => {};
+
+    if (!activeCalendarId) {
+      setDataLoaded(false);
+      return;
     }
 
-    return () => unsubscribe();
-  }, [isReadOnlyView]);
+    setDataLoaded(false);
+    unsubscribe = subscribeToCalendarState(activeCalendarId, (serverData) => {
+      if (serverData) {
+        if (serverData.calendarTitle !== undefined) setCalendarTitle(serverData.calendarTitle);
+        if (serverData.teamName !== undefined) {
+          setTeamName(serverData.teamName);
+        } else {
+          const parts = (serverData.calendarTitle || "").split(" — ");
+          setTeamName(parts[0] || "Team");
+        }
+        if (serverData.calendarName !== undefined) {
+          setCalendarName(serverData.calendarName);
+        } else {
+          const parts = (serverData.calendarTitle || "").split(" — ");
+          setCalendarName(parts[1] || serverData.calendarTitle || "Coverage Planner");
+        }
+        if (serverData.timeClockUrl !== undefined) setTimeClockUrl(serverData.timeClockUrl);
+        if (serverData.handbookUrl !== undefined) setHandbookUrl(serverData.handbookUrl);
+        if (serverData.currentYear !== undefined) setCurrentYear(Number(serverData.currentYear));
+        if (serverData.currentMonth !== undefined) setCurrentMonth(Number(serverData.currentMonth));
+        if (serverData.showHolidays !== undefined) setShowHolidays(!!serverData.showHolidays);
+        if (serverData.weekStartsOn !== undefined) setWeekStartsOn(serverData.weekStartsOn);
+        if (serverData.activeThemeId !== undefined) setActiveThemeId(serverData.activeThemeId);
+        if (serverData.fontSize !== undefined) setFontSize(serverData.fontSize);
+        // Active calendar keys/labels loaded from DB
+        let keys = serverData.statusKeys || [];
+        let labels = serverData.statusLabels || {};
+        let colors = serverData.statusColors || {};
+        let rows = serverData.dayRows || {};
 
-  // Centralized auto-sync of changes to server (throttled/debounced to avoid spamming writes)
+        const hasLegacy = keys.includes('pto') || keys.includes('gap') || keys.includes('critical') || keys.includes('covered') || keys.includes('purple') || keys.includes('flex') || keys.length > 4 || keys.length === 0;
+        if (hasLegacy) {
+          keys = ['time_off', 'flex_time', 'label_3', 'label_4'];
+          labels = {
+            time_off: 'Time Off',
+            flex_time: 'Flex Time',
+            label_3: 'Label 3',
+            label_4: 'Label 4'
+          };
+          colors = {
+            time_off: 'sky',
+            flex_time: 'amber',
+            label_3: 'pink',
+            label_4: 'purple'
+          };
+          
+          // Migrate cell colors in row structures
+          const migratedRows: Record<string, CalendarRow[]> = {};
+          Object.keys(rows).forEach(dateKey => {
+            const dayLines = rows[dateKey] || [];
+            migratedRows[dateKey] = dayLines.map((row: any) => {
+              let newColor = row.color;
+              if (row.color === 'pto') newColor = 'time_off';
+              else if (row.color === 'gap') newColor = 'flex_time';
+              else if (row.color === 'critical') newColor = 'label_3';
+              else if (row.color === 'covered') newColor = 'label_4';
+              else if (row.color === 'purple') newColor = 'label_4';
+              return { ...row, color: newColor };
+            });
+          });
+          rows = migratedRows;
+        }
+
+        setStatusKeys(keys);
+        setStatusLabels(labels);
+        setStatusColors(colors);
+        setDayRows(rows);
+
+        if (serverData.companyHolidays !== undefined) setCompanyHolidays(serverData.companyHolidays);
+        if (serverData.disabledHolidays !== undefined) setDisabledHolidays(serverData.disabledHolidays);
+        if (serverData.managerName !== undefined) setManagerName(serverData.managerName);
+      }
+      setDataLoaded(true);
+    }, (err) => {
+      console.error("Firestore listening failed:", err);
+      setDataLoaded(true);
+    });
+
+    return () => unsubscribe();
+  }, [activeCalendarId]);
+
+  // Centralized auto-sync of changes to Firestore (throttled/debounced to avoid spamming writes)
   useEffect(() => {
-    if (!dataLoaded || isReadOnlyView) return;
+    if (!dataLoaded || isReadOnlyView || !activeCalendarId) return;
 
     const timer = setTimeout(async () => {
       try {
         const payload = {
           calendarTitle,
+          teamName,
+          calendarName,
           timeClockUrl,
           handbookUrl,
           currentYear,
@@ -621,12 +903,13 @@ export default function App() {
           statusColors,
           companyHolidays,
           disabledHolidays,
-          dayRows
+          dayRows,
+          managerName: managerName || "John Smith"
         };
 
         setIsSaving(true);
-        // Save to Firestore!
-        await saveCalendarStateToFirestore(payload);
+        // Save to specific active workspace in Firestore
+        await saveCalendarStateToFirestore(activeCalendarId, payload);
 
         // Also update local file cache fallback as background task
         await fetch("/api/calendar-state", {
@@ -650,6 +933,7 @@ export default function App() {
   }, [
     dataLoaded,
     isReadOnlyView,
+    activeCalendarId,
     calendarTitle,
     timeClockUrl,
     handbookUrl,
@@ -664,7 +948,8 @@ export default function App() {
     statusColors,
     companyHolidays,
     disabledHolidays,
-    dayRows
+    dayRows,
+    managerName
   ]);
 
   // Undo/Redo States for dayRows
@@ -987,14 +1272,10 @@ export default function App() {
   const handlePasswordSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = passwordInput.trim().toLowerCase();
-    if (
-      trimmed === 'loraine' ||
-      trimmed === 'andrew' ||
-      trimmed.includes('loraine') ||
-      trimmed.includes('velez') ||
-      trimmed.includes('lugo') ||
-      trimmed === 'admin'
-    ) {
+    const correctPass = (managerName || "").trim().toLowerCase();
+    const isCorrect = trimmed === correctPass;
+
+    if (isCorrect) {
       setIsMemoUnlocked(true);
       setShowPasswordModal(false);
       
@@ -1009,7 +1290,7 @@ export default function App() {
       }
       setPasswordTargetAction(null);
     } else {
-      setPasswordError("Incorrect password. Try using the owner's name \"Loraine\" or \"Andrew\"!");
+      setPasswordError("Incorrect password. Try using the manager first name entered on set up!");
     }
   };
 
@@ -1220,26 +1501,1075 @@ export default function App() {
       const k = formatDateKey(currentYear, currentMonth, i);
       const rows = dayRows[k] || [];
       rows.forEach(row => {
-        if (row.color === 'pto') ptoCount++;
-        else if (row.color === 'gap') gapCount++;
-        else if (row.color === 'critical') criticalCount++;
-        else if (row.color === 'covered') coveredCount++;
+        if (row.color === 'pto' || row.color === 'time_off') ptoCount++;
+        else if (row.color === 'gap' || row.color === 'flex_time') gapCount++;
+        else if (row.color === 'critical' || row.color === 'label_3') criticalCount++;
+        else if (row.color === 'covered' || row.color === 'label_4') coveredCount++;
         else if (row.color === 'purple') purpleCount++;
       });
     }
     return { ptoCount, gapCount, criticalCount, coveredCount, purpleCount };
   };
 
+  // Passwordless Workspace Actions
+  const handleCreateCalendar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCalendarTitle.trim()) return;
+    try {
+      const defaultPayload = {
+        calendarTitle: newCalendarTitle.trim(),
+        timeClockUrl: 'https://clock.payrollservers.us/#/clock/web/login',
+        handbookUrl: 'https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing',
+        currentYear: 2026,
+        currentMonth: 4,
+        showHolidays: true,
+        weekStartsOn: 'Sunday',
+        activeThemeId: 'charcoal',
+        fontSize: 'sm',
+        statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
+        statusLabels: {
+          time_off: 'Time Off',
+          flex_time: 'Flex Time',
+          label_3: 'Label 3',
+          label_4: 'Label 4'
+        },
+        statusColors: {
+          time_off: 'sky',
+          flex_time: 'amber',
+          label_3: 'pink',
+          label_4: 'purple'
+        },
+        companyHolidays: {},
+        disabledHolidays: [],
+        dayRows: {}
+      };
+      
+      const newId = await createNewCalendar(managerName.trim() || "Residential Manager", newCalendarTitle.trim(), defaultPayload);
+      setNewCalendarTitle("");
+      
+      const updatedList = await fetchAllCalendars();
+      setDashboardCalendars(updatedList);
+      
+      handleOpenCalendar(newId, updatedList);
+    } catch (err) {
+      console.error("Error creating new planner calendar:", err);
+    }
+  };
+
+  const handleUpdateTeamAndCalendarNames = async (newTeam: string, newCal: string) => {
+    const combined = `${newTeam} — ${newCal}`;
+    setTeamName(newTeam);
+    setCalendarName(newCal);
+    setCalendarTitle(combined);
+    if (activeCalendarId) {
+      await saveCalendarStateToFirestore(activeCalendarId, {
+        teamName: newTeam,
+        calendarName: newCal,
+        calendarTitle: combined
+      });
+      const updated = await fetchAllCalendars();
+      setDashboardCalendars(updated);
+    }
+  };
+
+  const handleOpenCalendar = (calId: string, customList?: any[], viewOnlyForce?: boolean) => {
+    setActiveCalendarId(calId);
+    const listToSearch = customList || dashboardCalendars;
+    const cal = listToSearch.find(c => c.id === calId);
+    if (cal) {
+      const isReadOnly = viewOnlyForce !== undefined ? viewOnlyForce : isReadOnlyView;
+      const teamSlug = slugifyCasePreserving(cal.teamName || cal.calendarTitle || "Team");
+      const calSlug = slugifyCasePreserving(cal.calendarName || "Coverage-Planner");
+      const suffix = isReadOnly ? "-viewonly" : "";
+      window.history.pushState(null, '', `/${teamSlug}/${calSlug}${suffix}?calendarId=${calId}`);
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      params.set('calendarId', calId);
+      params.delete('readonly'); // default to full edit access
+      window.history.pushState(null, '', '?' + params.toString());
+    }
+  };
+
+  const handleExecuteSecureAction = async () => {
+    if (verificationInput.trim().toUpperCase() !== randomVerificationWord) {
+      setVerificationError(`Incorrect! Please type "${randomVerificationWord}" to confirm.`);
+      return;
+    }
+
+    try {
+      if (secureAction === 'rename') {
+        const titleToSave = proposedNewTitle.trim();
+        setCalendarTitle(titleToSave);
+        await saveCalendarStateToFirestore(activeCalendarId, { calendarTitle: titleToSave });
+        const updatedList = await fetchAllCalendars();
+        setDashboardCalendars(updatedList);
+        alert(`Successfully renamed the Board to "${titleToSave}"!`);
+      } else if (secureAction === 'delete') {
+        await deleteCalendar(activeCalendarId);
+        const updatedList = await fetchAllCalendars();
+        setDashboardCalendars(updatedList);
+        
+        setUnlockedCalendars(prev => {
+          const updated = { ...prev };
+          delete updated[activeCalendarId];
+          localStorage.setItem('mgmt_unlocked_calendars_v1', JSON.stringify(updated));
+          return updated;
+        });
+
+        setActiveCalendarId("");
+        const params = new URLSearchParams(window.location.search);
+        params.delete('calendarId');
+        params.delete('readonly');
+        window.history.pushState(null, '', '?' + params.toString());
+        alert("The Board was deleted successfully.");
+      }
+      setIsSecureConfirmOpen(false);
+      setSecureAction(null);
+      setProposedNewTitle("");
+      setVerificationInput("");
+      setVerificationError("");
+    } catch (err) {
+      console.error("Error executing secure workspace action:", err);
+      setVerificationError("Cloud operation failed. Please check your connection.");
+    }
+  };
+
+  const openDeleteWorkspaceDialog = () => {
+    const word = RANDOM_VERIFICATION_WORDS[Math.floor(Math.random() * RANDOM_VERIFICATION_WORDS.length)];
+    const numA = Math.floor(Math.random() * 8) + 3; // 3 to 10
+    const numB = Math.floor(Math.random() * 8) + 3; // 3 to 10
+    setDeleteWordChallenge(word);
+    setDeleteMathChallenge({ n1: numA, n2: numB, ans: numA + numB });
+    setDeleteWordInput("");
+    setDeleteMathInput("");
+    setDeleteError("");
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleExecuteDeleteWorkspace = async () => {
+    if (deleteWordInput.trim().toUpperCase() !== deleteWordChallenge) {
+      setDeleteError(`Incorrect confirmation word. Please type "${deleteWordChallenge}".`);
+      return;
+    }
+    const enteredAns = parseInt(deleteMathInput.trim(), 10);
+    if (isNaN(enteredAns) || enteredAns !== deleteMathChallenge.ans) {
+      setDeleteError(`Incorrect math answer. What is ${deleteMathChallenge.n1} + ${deleteMathChallenge.n2}?`);
+      return;
+    }
+
+    try {
+      if (activeCalendarId) {
+        await deleteCalendar(activeCalendarId);
+        
+        // Remove from dashboard state
+        const updatedList = await fetchAllCalendars();
+        setDashboardCalendars(updatedList);
+        
+        // Remove from unlocked credentials
+        setUnlockedCalendars(prev => {
+          const updated = { ...prev };
+          delete updated[activeCalendarId];
+          localStorage.setItem('mgmt_unlocked_calendars_v1', JSON.stringify(updated));
+          return updated;
+        });
+
+        setIsDeleteModalOpen(false);
+        setActiveCalendarId(null);
+        
+        // Go back to home routing
+        const params = new URLSearchParams(window.location.search);
+        params.delete('calendarId');
+        params.delete('readonly');
+        window.history.pushState(null, '', '?' + params.toString());
+        
+        alert("The workspace was deleted successfully.");
+      }
+    } catch (err) {
+      console.error("Error deleting workspace:", err);
+      setDeleteError("Firestore operation failed. Please check your connection.");
+    }
+  };
+
+  const handleDeleteCalendar = async (calId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to delete the workspace "${title}"? This action is permanent and cannot be undone.`)) return;
+    try {
+      await deleteCalendar(calId);
+      const updatedList = await fetchAllCalendars();
+      setDashboardCalendars(updatedList);
+    } catch (err) {
+      console.error("Error deleting calendar workspace:", err);
+    }
+  };
+
+  const handleRenameCalendar = async (calId: string, oldTitle: string) => {
+    const newTitle = window.prompt("Change calendar name:", oldTitle);
+    if (!newTitle || !newTitle.trim()) return;
+    try {
+      await saveCalendarStateToFirestore(calId, { calendarTitle: newTitle.trim() });
+      const updatedList = await fetchAllCalendars();
+      setDashboardCalendars(updatedList);
+    } catch (err) {
+      console.error("Error renaming calendar Title:", err);
+    }
+  };
+
+  const handleImportLocalStorage = async () => {
+    try {
+      const localTitle = localStorage.getItem('calendar_title_v2') || "Imported Staff Planner";
+      const localClock = localStorage.getItem('calendar_time_clock_url_v1') || 'https://clock.payrollservers.us/#/clock/web/login';
+      const localHandbook = localStorage.getItem('calendar_handbook_url_v1') || 'https://drive.google.com/file/d/1EuCrODif2azQB8hKJLdbuvh_OjexxFhg/view?usp=sharing';
+      
+      const localKeysRaw = localStorage.getItem('calendar_status_keys_v3');
+      let localKeys = localKeysRaw ? JSON.parse(localKeysRaw) : ['time_off', 'flex_time', 'label_3', 'label_4'];
+      
+      const localLabelsRaw = localStorage.getItem('calendar_status_labels_v3');
+      let localLabels = localLabelsRaw ? JSON.parse(localLabelsRaw) : {
+        time_off: 'Time Off', flex_time: 'Flex Time', label_3: 'Label 3', label_4: 'Label 4'
+      };
+      
+      const localColorsRaw = localStorage.getItem('calendar_status_colors_v2');
+      let localColors = localColorsRaw ? JSON.parse(localColorsRaw) : {
+        time_off: 'sky', flex_time: 'amber', label_3: 'pink', label_4: 'purple'
+      };
+
+      const hasLegacy = localKeys.includes('pto') || localKeys.includes('gap') || localKeys.includes('critical') || localKeys.includes('covered') || localKeys.includes('purple');
+      if (hasLegacy) {
+        localKeys = ['time_off', 'flex_time', 'label_3', 'label_4'];
+        localLabels = {
+          time_off: 'Time Off', flex_time: 'Flex Time', label_3: 'Label 3', label_4: 'Label 4'
+        };
+        localColors = {
+          time_off: 'sky', flex_time: 'amber', label_3: 'pink', label_4: 'purple'
+        };
+      }
+      
+      const localHolidaysRaw = localStorage.getItem('calendar_company_holidays_v2');
+      const localHolidays = localHolidaysRaw ? JSON.parse(localHolidaysRaw) : {};
+      
+      const localDisabledRaw = localStorage.getItem('calendar_disabled_holidays_v1');
+      const localDisabled = localDisabledRaw ? JSON.parse(localDisabledRaw) : [];
+      
+      const localRowsRaw = localStorage.getItem('calendar_rows_v2');
+      const localRows = localRowsRaw ? JSON.parse(localRowsRaw) : {};
+      
+      const payload = {
+        calendarTitle: localTitle,
+        timeClockUrl: localClock,
+        handbookUrl: localHandbook,
+        currentYear: 2026,
+        currentMonth: 4,
+        showHolidays: true,
+        weekStartsOn: 'Sunday',
+        activeThemeId: 'charcoal',
+        fontSize: 'sm',
+        statusKeys: localKeys,
+        statusLabels: localLabels,
+        statusColors: localColors,
+        companyHolidays: localHolidays,
+        disabledHolidays: localDisabled,
+        dayRows: localRows
+      };
+      
+      const newId = await createNewCalendar(managerName || "Residential Manager", localTitle, payload);
+      const updatedList = await fetchAllCalendars();
+      setDashboardCalendars(updatedList);
+      handleOpenCalendar(newId, updatedList);
+    } catch (err) {
+      console.error("Failed to import local browser workspace:", err);
+      alert("Local schedule import failed.");
+    }
+  };
+
+  const renderDashboardPlanner = () => {
+    // Check if there is pre-existing browser state they can convert
+    const hasLocalPlannerState = typeof localStorage !== 'undefined' && (
+      localStorage.getItem('calendar_rows_v2') || localStorage.getItem('calendar_title_v2')
+    );
+
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-indigo-100">
+        {/* Sleek Traditional Top Navigation Header */}
+        <header className="sticky top-0 z-50 bg-white border-b border-slate-200 px-6 py-4.5 shadow-3xs">
+          <div className="max-w-5xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            {/* Elegant Header Branding */}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-slate-900 text-white flex items-center justify-center rounded-xl shadow-3xs shrink-0">
+                <Layers className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div className="text-left">
+                <h1 className="text-base font-bold text-slate-900 tracking-tight leading-none font-display">
+                  MGMT Residential
+                </h1>
+                <p className="text-[11px] text-slate-500 font-medium mt-1">
+                  Workforce Planning Tool
+                </p>
+              </div>
+            </div>
+
+            {/* Sleek Minimal traditional navigation elements if any */}
+            <div className="flex items-center gap-3">
+            </div>
+
+          </div>
+        </header>
+
+        {/* Dashboard Content Container */}
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }} 
+          animate={{ opacity: 1, y: 0 }}
+          className="flex-1 max-w-5xl w-full mx-auto p-6 sm:p-10 space-y-8"
+        >
+          
+          {/* Import Browser Backup banner */}
+          {hasLocalPlannerState && (
+            <div className="p-5 bg-indigo-50 border border-indigo-150 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-indigo-950 flex items-center gap-1.5 leading-none">
+                  <Sparkles className="w-4 h-4 text-indigo-500" />
+                  Convert local computer schedule to cloud calendar!
+                </h3>
+                <p className="text-xs text-indigo-850 leading-relaxed font-semibold">
+                  We found an existing schedule offline on this local web browser. Let's upload it to a brand new shared calendar workspace instantly so other managers can access it remotely!
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleImportLocalStorage}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer active:scale-95"
+              >
+                Upload Offline Calendar
+              </button>
+            </div>
+          )}
+
+          {/* Welcome Display Card */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white rounded-3xl p-8 shadow-3xs relative overflow-hidden">
+            <div className="relative z-10 space-y-2">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight leading-none font-display text-white">
+                Welcome!
+              </h1>
+              <p className="text-[12px] sm:text-xs text-slate-200 font-semibold max-w-lg leading-relaxed">
+                Select or create a workspace to start planning your team's schedule.
+              </p>
+            </div>
+            
+            {/* Ambient subtle shape */}
+            <div className="absolute top-1/2 -right-12 -translate-y-1/2 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          </div>
+
+          {/* Grid of active calendar workspaces */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <h2 className="text-xs font-bold text-slate-450 uppercase tracking-widest">
+                Active Calendars ({dashboardCalendars.length})
+              </h2>
+            </div>
+            
+            {dashboardLoading ? (
+               <div className="py-24 flex flex-col items-center justify-center gap-3 font-medium text-slate-500">
+                <div className="w-9 h-9 border-3 border-slate-200 border-t-indigo-600 rounded-full animate-spin" />
+                <p className="text-xs text-slate-500 font-semibold font-mono animate-pulse">Syncing dynamic cloud calendars...</p>
+              </div>
+            ) : dashboardCalendars.length === 0 ? (
+              <div className="border border-dashed border-slate-300 bg-white rounded-3xl py-16 px-6 text-center max-w-lg mx-auto">
+                <Layers className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-700 font-display">No Calendars Created Yet</h3>
+                <p className="text-xs text-slate-500 mt-1 mb-5 leading-relaxed font-semibold max-w-xs mx-auto">
+                  Click "+ Add New Calendar" below to set up a new MGMT Residential Schedule Planning calendar with custom colors, employee links, and secure lock verification!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {dashboardCalendars.map((cal) => {
+                  const teamSlug = slugifyCasePreserving(cal.teamName || cal.calendarTitle || "Team");
+                  const calSlug = slugifyCasePreserving(cal.calendarName || "Coverage-Planner");
+                  const shareUrl = `${window.location.origin}/${teamSlug}/${calSlug}-viewonly?calendarId=${cal.id}`;
+                  const displayTitle = cal.teamName || cal.calendarTitle || "Team";
+                  const displaySubheader = cal.calendarName || "Calrndar Name";
+                  const displayManagerName = cal.managerName || "John";
+                  
+                  return (
+                    <motion.div
+                       key={cal.id}
+                       layoutId={cal.id}
+                       className="bg-white border border-slate-200 hover:border-indigo-200 hover:shadow-2xs rounded-2xl p-6 transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1 flex-1">
+                            <h3 className="text-[15px] font-bold text-slate-800 tracking-tight leading-snug">
+                              {displayTitle}
+                            </h3>
+                            <p className="text-xs text-slate-500 font-semibold">
+                              {displaySubheader}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md px-2 py-0.5 font-mono">
+                                Manager: {displayManagerName}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 mt-6 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const link = document.createElement('textarea');
+                            link.value = shareUrl;
+                            document.body.appendChild(link);
+                            link.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(link);
+
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(shareUrl).catch(() => {});
+                            }
+
+                            setCopiedNotificationUrl(shareUrl);
+                            // Hide after 4 seconds
+                            setTimeout(() => {
+                              setCopiedNotificationUrl(null);
+                            }, 4000);
+                          }}
+                          className="w-full sm:w-auto text-[11px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center justify-center gap-1 cursor-pointer py-1.5 shrink-0 bg-slate-50 border border-slate-200/50 hover:bg-slate-100 hover:border-slate-200 px-3.5 rounded-lg transition-all"
+                          title="Click to copy view-only link for employees"
+                        >
+                          <Link2 className="w-3.5 h-3.5 shrink-0 text-indigo-500" />
+                          <span>Copy View-Only Link</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (unlockedCalendars[cal.id]) {
+                              handleOpenCalendar(cal.id);
+                            } else {
+                              setChallengeCalId(cal.id);
+                              setChallengeCalTitle(cal.calendarTitle || "Untitled Calendar");
+                              setChallengeCalPass("");
+                              setChallengeError("");
+                              setIsPasscodeModalOpen(true);
+                            }
+                          }}
+                          className="w-full sm:w-auto px-4 py-2 bg-zinc-900 hover:bg-slate-800 hover:shadow-xs text-white text-xs font-bold rounded-xl transition-all cursor-pointer text-center active:scale-95 shadow-4xs shrink-0"
+                        >
+                          Edit Calendar
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+
+                {/* Direct '+' Creation Card in Grid */}
+                <motion.div
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="bg-white border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-slate-50/50 rounded-2xl p-6 transition-all flex flex-col justify-center items-center text-center cursor-pointer min-h-[190px] group shadow-4xs"
+                  onClick={() => {
+                    setCreateCalTitle("");
+                    setCreateCalPass("");
+                    setCreateError("");
+                    setCreateTeamSelector("");
+                    setCreateCustomTeam("");
+                    setCreateCalendarName("");
+                    setCreateManagerName("");
+                    setIsCreateModalOpen(true);
+                  }}
+                >
+                  <div className="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-indigo-50 text-slate-500 group-hover:text-indigo-600 transition-colors flex items-center justify-center mb-3">
+                    <Plus className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <span className="text-sm font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">
+                    Add New Calendar
+                  </span>
+                  <p className="text-xs text-slate-450 mt-1 font-semibold max-w-xs">
+                    Create a separate, locked team coverage planner instantly
+                  </p>
+                </motion.div>
+
+              </div>
+            )}
+          </div>
+          
+          <footer className="mt-16 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-normal pt-12 border-t border-slate-100">
+            MGMT Residential - Internal use only
+          </footer>
+        </motion.div>
+
+        {/* Custom Modals for Creation and Security Challenges */}
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-905/60 backdrop-blur-xs">
+            <div className="fixed inset-0 bg-slate-900/40 pointer-events-none" />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-md w-full p-6 sm:p-8 space-y-6 relative z-10"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900 font-display">
+                  Create New Team Calendar
+                </h3>
+                <button 
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg whitespace-nowrap"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {createError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-xl font-bold leading-normal">
+                  {createError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* 1. Team name Dropdown (becomes h1) */}
+                <div>
+                  <h1 className="text-[14px] font-extrabold text-slate-800 mb-1.5 block">
+                    Team Name <span className="text-rose-500">*</span>
+                  </h1>
+                  <select
+                    required
+                    value={createTeamSelector}
+                    onChange={(e) => {
+                      setCreateTeamSelector(e.target.value);
+                      if (e.target.value !== "add_new") {
+                        setCreateCustomTeam("");
+                      }
+                    }}
+                    className="w-full text-xs px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-semibold text-slate-800 cursor-pointer"
+                  >
+                    <option value="">-- Select Team name --</option>
+                    <option value="Leasing">Leasing</option>
+                    <option value="Construction">Construction</option>
+                    <option value="Service">Service</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="add_new">Add Custom...</option>
+                  </select>
+
+                  {createTeamSelector === "add_new" && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-2"
+                    >
+                      <input
+                        type="text"
+                        required
+                        placeholder="Type custom Team Name here..."
+                        value={createCustomTeam}
+                        onChange={(e) => setCreateCustomTeam(e.target.value)}
+                        className="w-full text-xs px-3.5 py-2 bg-white border border-indigo-200 focus:border-indigo-400 focus:outline-none rounded-xl font-semibold text-slate-800 shadow-sm"
+                        autoFocus
+                      />
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* 2. Calendar name (becomes h2) */}
+                <div>
+                  <h2 className="text-xs font-bold text-slate-700 mb-1.5 block">
+                    Calendar Name <span className="text-rose-500">*</span>
+                  </h2>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Coverage Planner"
+                    value={createCalendarName}
+                    onChange={(e) => setCreateCalendarName(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-semibold text-slate-800"
+                  />
+                </div>
+
+                {/* 3. Manager first name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Manager First Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John (Single Word)"
+                    value={createManagerName}
+                    onChange={(e) => setCreateManagerName(e.target.value.replace(/\s+/g, ""))}
+                    className="w-full text-xs px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-semibold text-slate-800"
+                  />
+                  <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl mt-2">
+                    <p className="text-[11px] text-indigo-900 font-bold leading-normal">
+                      Disclosure / Note:
+                    </p>
+                    <p className="text-[10px] text-indigo-800 mt-0.5 leading-relaxed font-semibold">
+                      This manager first name becomes your password passcode (single word, case-insensitive) to unlock this editor or save changes later on. Keep it secure!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const resolvedTeamName = createTeamSelector === "add_new" ? createCustomTeam.trim() : createTeamSelector;
+                    const calNameVal = createCalendarName.trim();
+                    const managerNameVal = createManagerName.trim();
+
+                    if (!resolvedTeamName) {
+                      setCreateError("Team Name is required");
+                      return;
+                    }
+                    if (!calNameVal) {
+                      setCreateError("Calendar Name is required");
+                      return;
+                    }
+                    if (!managerNameVal) {
+                      setCreateError("Manager First Name is required (acts as your password)");
+                      return;
+                    }
+
+                    const titleCombined = `${resolvedTeamName} — ${calNameVal}`;
+
+                    try {
+                      const defaultPayload = {
+                        teamName: resolvedTeamName,
+                        calendarName: calNameVal,
+                        calendarTitle: titleCombined,
+                        timeClockUrl: 'https://clock.payrollservers.us/#/clock/web/login',
+                        handbookUrl: 'https://www.labor.ca.gov/',
+                        currentYear: 2026,
+                        currentMonth: 4,
+                        showHolidays: true,
+                        weekStartsOn: 'Sunday',
+                        activeThemeId: 'charcoal',
+                        fontSize: 'sm',
+                        statusKeys: ['time_off', 'flex_time', 'label_3', 'label_4'],
+                        statusLabels: { 
+                          time_off: 'Time Off', 
+                          flex_time: 'Flex Time', 
+                          label_3: 'Label 3', 
+                          label_4: 'Label 4' 
+                        },
+                        statusColors: { 
+                          time_off: 'sky', 
+                          flex_time: 'amber', 
+                          label_3: 'pink', 
+                          label_4: 'purple' 
+                        },
+                        companyHolidays: [],
+                        disabledHolidays: [],
+                        dayRows: {}
+                      };
+                      const newId = await createNewCalendar(managerNameVal, titleCombined, defaultPayload);
+                      markCalendarUnlocked(newId);
+                      const updated = await fetchAllCalendars();
+                      setDashboardCalendars(updated);
+                      setIsCreateModalOpen(false);
+                      handleOpenCalendar(newId, updated);
+                    } catch (err: any) {
+                      setCreateError(err?.message || "Failed to create calendar");
+                    }
+                  }}
+                  className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-4xs"
+                >
+                  Create Calendar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isPasscodeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-905/60 backdrop-blur-xs">
+            <div className="fixed inset-0 bg-slate-900/40 pointer-events-none" />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 sm:p-8 space-y-6 relative z-10"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="text-left">
+                  <h3 className="text-sm font-bold text-slate-950 font-display leading-tight">
+                    Manager Access
+                  </h3>
+                  <p className="text-[10.5px] text-slate-500 font-semibold mt-0.5">
+                    {challengeCalTitle}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setIsPasscodeModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg whitespace-nowrap"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {challengeError && (
+                <div className="p-3 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl font-bold text-center leading-normal">
+                  {challengeError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 text-center">
+                    Enter Manager Password
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter password..."
+                    value={challengeCalPass}
+                    onChange={(e) => setChallengeCalPass(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        document.getElementById('challenge_submit_btn')?.click();
+                      }
+                    }}
+                    className="w-full text-center text-sm px-4 py-3 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-semibold tracking-wider text-slate-800"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-slate-500 mt-2 text-center font-medium leading-normal">
+                    The password is the Manager First Name you set up for this calendar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPasscodeModalOpen(false)}
+                  className="w-1/2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  id="challenge_submit_btn"
+                  onClick={async () => {
+                    const passInput = challengeCalPass.trim().toLowerCase();
+                    const found = dashboardCalendars.find(c => c.id === challengeCalId);
+                    if (found) {
+                      const correctPass = (found.managerName || "").trim().toLowerCase();
+                      const isCorrect = passInput === correctPass;
+                        
+                      if (isCorrect) {
+                        markCalendarUnlocked(challengeCalId);
+                        setIsPasscodeModalOpen(false);
+                        handleOpenCalendar(challengeCalId);
+                      } else {
+                        setChallengeError("Incorrect Password. Try again.");
+                      }
+                    } else {
+                      setChallengeError("Calendar not found.");
+                    }
+                  }}
+                  className="w-1/2 px-4 py-2.5 bg-zinc-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-4xs text-center whitespace-nowrap"
+                >
+                  Verify Access
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isSecureConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-905/60 backdrop-blur-xs">
+            <div className="fixed inset-0 bg-slate-900/40 pointer-events-none" />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 sm:p-8 space-y-5 relative z-10"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="text-left">
+                  <h3 className="text-sm font-bold text-slate-950 font-display leading-tight">
+                    Security Verification Required
+                  </h3>
+                  <p className="text-[10.5px] text-rose-600 font-bold mt-0.5 uppercase tracking-wide">
+                    {secureAction === 'delete' ? 'DANGER: DELETING CALENDAR' : 'CONFIRM METADATA CHANGE'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setIsSecureConfirmOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {verificationError && (
+                <div className="p-3 bg-red-50 border border-red-100 text-red-700 text-[11px] rounded-xl font-bold text-center leading-normal">
+                  {verificationError}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                This area is locked against accidental alterations. To execute your change, please type the random verification word below:
+              </p>
+
+              <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl text-center">
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-1">
+                  Verification Code Word
+                </span>
+                <span className="text-lg font-black font-mono tracking-widest text-slate-800 uppercase select-none">
+                  {randomVerificationWord}
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Type code word here..."
+                    value={verificationInput}
+                    onChange={(e) => setVerificationInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleExecuteSecureAction();
+                      }
+                    }}
+                    className="w-full text-center text-xs px-4 py-3 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-bold tracking-widest text-slate-800 uppercase"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSecureConfirmOpen(false)}
+                  className="w-1/2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteSecureAction}
+                  className={`w-1/2 px-4 py-2.5 text-white text-xs font-bold rounded-xl transition-all cursor-pointer text-center shadow-4xs ${
+                    secureAction === 'delete' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-black'
+                  }`}
+                >
+                  Confirm Change
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="fixed inset-0 bg-slate-900/40 pointer-events-none" />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full p-6 sm:p-8 space-y-5 relative z-10 text-left"
+            >
+              <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-rose-600 font-display leading-tight">
+                    Delete Workspace
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wide">
+                    Irreversible Operation
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] rounded-xl font-bold text-center leading-normal">
+                  {deleteError}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-600 leading-normal font-semibold">
+                This action is permanent and cannot be undone. Solve the steps below to confirm:
+              </p>
+
+              {/* Word verification step */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                  Type Verification Word: <span className="text-slate-800 select-all font-mono font-black text-xs">"{deleteWordChallenge}"</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={`Type "${deleteWordChallenge}" here...`}
+                  value={deleteWordInput}
+                  onChange={(e) => setDeleteWordInput(e.target.value)}
+                  className="w-full text-center text-xs px-4 py-3 bg-slate-50 border border-slate-200 focus:border-rose-450 focus:bg-white focus:outline-none rounded-xl font-bold tracking-widest text-slate-800 uppercase"
+                  autoFocus
+                />
+              </div>
+
+              {/* Math answer step */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                  Math Problem: <span className="text-slate-800 font-black text-xs">What is {deleteMathChallenge.n1} + {deleteMathChallenge.n2}?</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter calculation result..."
+                  value={deleteMathInput}
+                  onChange={(e) => setDeleteMathInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleExecuteDeleteWorkspace();
+                    }
+                  }}
+                  className="w-full text-center text-xs px-4 py-3 bg-slate-50 border border-slate-200 focus:border-rose-450 focus:bg-white focus:outline-none rounded-xl font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="w-1/2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeleteWorkspace}
+                  className="w-1/2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer text-center shadow-4xs"
+                >
+                  Delete Workspace
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // MAIN RUNTIME CHECKS
+  if (!activeCalendarId) {
+    return (
+      <>
+        {renderDashboardPlanner()}
+        {renderCopiedToast()}
+      </>
+    );
+  }
+
   if (!dataLoaded) {
     return (
-      <div className="min-h-screen bg-slate-55 bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
         <div className="flex flex-col items-center gap-4 text-center max-w-sm">
           <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin" />
           <h2 className="text-sm font-bold text-slate-800 tracking-tight">Syncing Live Calendar State...</h2>
           <p className="text-xs text-slate-500 leading-normal font-medium">
-            Fetching the latest employee schedules, company holidays, and layout configurations from the server.
+            Fetching the latest employee schedules, company holidays, and layout configurations from the cloud.
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // PASSCODE LOCK SCREEN FOR DIRECT ACCESS
+  if (!isReadOnlyView && !unlockedCalendars[activeCalendarId]) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full p-6 sm:p-8 space-y-6 text-center"
+        >
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+            <Layers className="w-6 h-6 stroke-[2.2px] text-indigo-600" />
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-slate-900 font-display">
+              Manager Password Required
+            </h2>
+            <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+              To edit the workspace <span className="text-zinc-900 font-bold font-mono">"{calendarTitle || "this calendar"}"</span>, please enter the associated Manager first name password.
+            </p>
+          </div>
+
+          {challengeError && (
+            <div className="p-3 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl font-bold">
+              {challengeError}
+            </div>
+          )}
+
+          <div>
+            <input
+              type="password"
+              placeholder="Enter password..."
+              value={challengeCalPass}
+              onChange={(e) => setChallengeCalPass(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const passInput = challengeCalPass.trim().toLowerCase();
+                  const correctPass = (managerName || "").trim().toLowerCase();
+                  const isCorrect = passInput === correctPass;
+                    
+                  if (isCorrect) {
+                    markCalendarUnlocked(activeCalendarId);
+                    setChallengeCalPass("");
+                    setChallengeError("");
+                  } else {
+                    setChallengeError("Incorrect Password. Try again.");
+                  }
+                }
+              }}
+              className="w-full text-center text-sm px-4 py-3 bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none rounded-xl font-semibold tracking-wider text-slate-800"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveCalendarId(null);
+                window.history.pushState({}, '', window.location.pathname);
+              }}
+              className="w-1/2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-200"
+            >
+              Back to Home
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const passInput = challengeCalPass.trim().toLowerCase();
+                const correctPass = (managerName || "").trim().toLowerCase();
+                const isCorrect = passInput === correctPass;
+                  
+                if (isCorrect) {
+                  markCalendarUnlocked(activeCalendarId);
+                  setChallengeCalPass("");
+                  setChallengeError("");
+                } else {
+                  setChallengeError("Incorrect Password. Try again.");
+                }
+              }}
+              className="w-1/2 px-4 py-2.5 bg-zinc-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-4xs"
+            >
+              Unlock Editor
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -1257,61 +2587,71 @@ export default function App() {
               <CalendarIcon id="header_icon" className={`w-6 h-6 stroke-[2.2px] ${currentThemeStyle.text}`} />
             </div>
              <div className="title-group">
-              <h1 className="text-[26px] font-medium tracking-tight text-[#0f172a] font-display leading-tight flex flex-wrap items-center gap-4">
-                <span>{MONTH_NAMES[currentMonth]} {currentYear}</span>
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl print:hidden">
-                  <button
-                    type="button"
-                    onClick={handlePrevMonth}
-                    className="p-1.5 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
-                    title="Previous Month"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextMonth}
-                    className="p-1.5 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
-                    title="Next Month"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {!isReadOnlyView && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={handleUndo}
-                      disabled={pastStates.length === 0}
-                      className={`p-1.5 rounded-lg border-transparent transition-all ${
-                        pastStates.length === 0
-                          ? 'text-slate-300 cursor-not-allowed opacity-40'
-                          : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
-                      }`}
-                      title="Undo (Ctrl+Z)"
-                    >
-                      <Undo className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRedo}
-                      disabled={futureStates.length === 0}
-                      className={`p-1.5 rounded-lg border-transparent transition-all ${
-                        futureStates.length === 0
-                          ? 'text-slate-300 cursor-not-allowed opacity-40'
-                          : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
-                      }`}
-                      title="Redo (Ctrl+Y)"
-                    >
-                      <Redo className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </h1>
-              <p className="text-sm text-[#64748b] font-semibold mt-0.5">
-                {calendarTitle || "Productivity Planner & Federal Holidays"}
-              </p>
-            </div>
+               {/* Team Name becomes h1 */}
+               <h1 id="workspace_title_h1" className="text-xl sm:text-[22px] font-black text-slate-900 font-display tracking-tight leading-none">
+                 {teamName || "Team"}
+               </h1>
+               
+               {/* Calendar Name becomes h2 */}
+               <h2 id="workspace_subtitle_h2" className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1 block">
+                 {calendarName || "Coverage Planner"}
+               </h2>
+
+               {/* Month and toggle actions */}
+               <div className="mt-2.5 flex flex-wrap items-center gap-3">
+                 <span className="text-xs font-bold text-slate-700 bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                   {MONTH_NAMES[currentMonth]} {currentYear}
+                 </span>
+                 <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-xl print:hidden">
+                   <button
+                     type="button"
+                     onClick={handlePrevMonth}
+                     className="p-1 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
+                     title="Previous Month"
+                   >
+                     <ChevronLeft className="w-3.5 h-3.5" />
+                   </button>
+                   <button
+                     type="button"
+                     onClick={handleNextMonth}
+                     className="p-1 rounded-lg border-transparent transition-all text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs"
+                     title="Next Month"
+                   >
+                     <ChevronRight className="w-3.5 h-3.5" />
+                   </button>
+                 </div>
+                 {!isReadOnlyView && (
+                   <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
+                     <button
+                       type="button"
+                       onClick={handleUndo}
+                       disabled={pastStates.length === 0}
+                       className={`p-1.5 rounded-lg border-transparent transition-all ${
+                         pastStates.length === 0
+                           ? 'text-slate-300 cursor-not-allowed opacity-40'
+                           : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
+                       }`}
+                       title="Undo (Ctrl+Z)"
+                     >
+                       <Undo className="w-3 h-3" />
+                     </button>
+                     <button
+                       type="button"
+                       onClick={handleRedo}
+                       disabled={futureStates.length === 0}
+                       className={`p-1.5 rounded-lg border-transparent transition-all ${
+                         futureStates.length === 0
+                           ? 'text-slate-300 cursor-not-allowed opacity-40'
+                           : 'text-slate-600 bg-white shadow-3xs cursor-pointer active:scale-95 hover:text-slate-900 hover:shadow-xs'
+                       }`}
+                       title="Redo (Ctrl+Y)"
+                     >
+                       <Redo className="w-3 h-3" />
+                     </button>
+                   </div>
+                 )}
+               </div>
+             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
@@ -1364,6 +2704,22 @@ export default function App() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Read-Only Guest Mode</span>
               </div>
+            )}
+
+            {activeCalendarId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCalendarId(null);
+                  setPendingSlug(null);
+                  window.history.pushState(null, '', '/');
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 border border-slate-950 hover:bg-black text-white rounded-xl transition-all cursor-pointer text-xs font-bold shadow-3xs"
+                title="Go back to Team Coverage Planning Home"
+              >
+                <Home className="w-4 h-4 text-indigo-400" />
+                <span>Back Home</span>
+              </button>
             )}
 
             {/* Share Public Link Button */}
@@ -1694,28 +3050,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Custom Extra Settings Desk */}
+            {/* Custom Extra Settings */}
             <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.03)] space-y-5">
               <h2 className="text-xs font-medium tracking-wider uppercase text-[#94a3b8] font-display">
                 Settings
               </h2>
 
-              {/* Printable calendar subtitle */}
-              <div>
-                <label className="block text-xs font-bold text-[#334155] mb-1.5">
-                  Printable Title/Details
-                </label>
-                <input
-                  type="text"
-                  maxLength={50}
-                  value={calendarTitle}
-                  onChange={(e) => setCalendarTitle(e.target.value)}
-                  placeholder="e.g. PTO & Team Coverage Board"
-                  className={`w-full text-xs bg-[#f8fafc] border border-[#e2e8f0] rounded-lg p-2.5 outline-hidden ${currentThemeStyle.focusBorder} font-semibold`}
-                />
-              </div>
-
-              {/* Weekday arrangement arrangement */}
+              {/* Weekday arrangement */}
               <div>
                 <label className="block text-xs font-bold text-[#334155] mb-2">
                   First Day of Week
@@ -1765,20 +3106,248 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Clear active boards */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={openResetConfirm}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10.5px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                  title="Reset current month notes"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Reset</span>
-                </button>
+            {/* Administration */}
+            <div className="bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.03)] space-y-4">
+              <h2 className="text-xs font-bold tracking-wider uppercase text-slate-800 font-display">
+                Administration
+              </h2>
+              <p className="text-[11px] text-[#64748b] leading-normal font-medium">
+                Manage your workspace details, password, and active records below.
+              </p>
+
+              <div className="space-y-3 pt-1">
+                {/* Team Name row */}
+                <div className="flex flex-col p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 pr-2">
+                      <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Team Name</span>
+                      {!isEditingTeamName && (
+                        <span className="text-xs font-bold text-slate-800 truncate block">{teamName || "Team"}</span>
+                      )}
+                    </div>
+                    {!isEditingTeamName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempTeamInput(teamName || "Team");
+                          setIsEditingTeamName(true);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                        title="Edit Team Name"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingTeamName && (
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={tempTeamInput}
+                        onChange={(e) => setTempTeamInput(e.target.value)}
+                        className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:outline-none rounded-lg text-slate-800"
+                        placeholder="Team Name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (tempTeamInput.trim()) {
+                              handleUpdateTeamAndCalendarNames(tempTeamInput.trim(), calendarName || "Coverage Planner");
+                              setIsEditingTeamName(false);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setIsEditingTeamName(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tempTeamInput.trim()) {
+                            handleUpdateTeamAndCalendarNames(tempTeamInput.trim(), calendarName || "Coverage Planner");
+                            setIsEditingTeamName(false);
+                          }
+                        }}
+                        className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all"
+                        title="Save"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingTeamName(false)}
+                        className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Calendar Name row */}
+                <div className="flex flex-col p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 pr-2">
+                      <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Calendar Name</span>
+                      {!isEditingCalendarName && (
+                        <span className="text-xs font-bold text-slate-800 truncate block">{calendarName || "Coverage Planner"}</span>
+                      )}
+                    </div>
+                    {!isEditingCalendarName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempCalendarInput(calendarName || "Coverage Planner");
+                          setIsEditingCalendarName(true);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                        title="Edit Calendar Name"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingCalendarName && (
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={tempCalendarInput}
+                        onChange={(e) => setTempCalendarInput(e.target.value)}
+                        className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:outline-none rounded-lg text-slate-800"
+                        placeholder="Calendar Name"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (tempCalendarInput.trim()) {
+                              handleUpdateTeamAndCalendarNames(teamName || "Team", tempCalendarInput.trim());
+                              setIsEditingCalendarName(false);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setIsEditingCalendarName(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tempCalendarInput.trim()) {
+                            handleUpdateTeamAndCalendarNames(teamName || "Team", tempCalendarInput.trim());
+                            setIsEditingCalendarName(false);
+                          }
+                        }}
+                        className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all"
+                        title="Save"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingCalendarName(false)}
+                        className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Manager Password row */}
+                <div className="flex flex-col p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 pr-2">
+                      <span className="block text-[9px] uppercase font-black tracking-wider text-slate-400">Manager Password</span>
+                      {!isEditingManagerPassword && (
+                        <span className="text-xs font-bold text-slate-800 truncate block">••••••••</span>
+                      )}
+                    </div>
+                    {!isEditingManagerPassword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempPasswordInput(managerName);
+                          setIsEditingManagerPassword(true);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                        title="Edit Manager Password"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {isEditingManagerPassword && (
+                    <div className="flex items-center gap-1.5 w-full">
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={tempPasswordInput}
+                        onChange={(e) => setTempPasswordInput(e.target.value)}
+                        className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:outline-none rounded-lg text-slate-800"
+                        placeholder="Password (no spaces)"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const trimmed = tempPasswordInput.trim().replace(/\s+/g, "");
+                            if (trimmed) {
+                              setManagerName(trimmed);
+                              setIsEditingManagerPassword(false);
+                            }
+                          } else if (e.key === 'Escape') {
+                            setIsEditingManagerPassword(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = tempPasswordInput.trim().replace(/\s+/g, "");
+                          if (trimmed) {
+                            setManagerName(trimmed);
+                            setIsEditingManagerPassword(false);
+                          }
+                        }}
+                        className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all"
+                        title="Save"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingManagerPassword(false)}
+                        className="p-1.5 text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grid controls rows */}
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={openResetConfirm}
+                    className="py-2 px-3 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-600 bg-white hover:bg-rose-50 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Reset Month</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={openDeleteWorkspaceDialog}
+                    className="py-2 px-3 border border-transparent bg-rose-50 hover:bg-rose-100 border-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>Delete Workspace</span>
+                  </button>
+                </div>
+
               </div>
-
             </div>
 
             {/* Next Month Quick-View mini-calendar preview card inside sidebar */}
@@ -2225,7 +3794,7 @@ export default function App() {
             {/* Bottom mini disclaimer footer */}
             <footer className="bg-[#f8fafc] py-4 px-6 border-t border-[#e2e8f0] flex items-center justify-between text-slate-400 font-mono text-[9.5px] print:hidden">
               <div>PTO and Coverage Planner. — Internal Use Only</div>
-              <div>Created by Loraine Velez for MGMT Residential Use</div>
+              <div>MGMT Residential - Internal use only</div>
             </footer>
 
           </section>
@@ -2909,7 +4478,7 @@ export default function App() {
                   <input
                     type="text"
                     readOnly
-                    value={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?readonly=true` : ''}
+                    value={typeof window !== 'undefined' ? `${window.location.origin}/${slugifyCasePreserving(teamName || calendarTitle || "Team")}/${slugifyCasePreserving(calendarName || "Coverage-Planner")}-viewonly?calendarId=${activeCalendarId || ''}` : ''}
                     onClick={(e) => {
                       (e.target as HTMLInputElement).select();
                     }}
@@ -2918,7 +4487,9 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?readonly=true` : '';
+                      const teamSlug = slugifyCasePreserving(teamName || calendarTitle || "Team");
+                      const calSlug = slugifyCasePreserving(calendarName || "Coverage-Planner");
+                      const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/${teamSlug}/${calSlug}-viewonly?calendarId=${activeCalendarId || ''}` : '';
                       navigator.clipboard.writeText(shareUrl).then(() => {
                         setIsCopied(true);
                         setTimeout(() => setIsCopied(false), 2500);
@@ -3075,6 +4646,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {renderCopiedToast()}
     </div>
   );
 }

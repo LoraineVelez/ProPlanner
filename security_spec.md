@@ -1,21 +1,14 @@
-# Firestore Security Specification
+# Firestore Security Specification - Multi-User Dashboard
 
-This document details the data invariants, vulnerable payload types, and rule behaviors for the PTO and Coverage Planner application.
+This document details the Zero-Trust data invariants and rules for the multi-user PTO and Coverage Planner.
 
 ## 1. Data Invariants
-- Anyone can read the shared global calendar configurations, schedules, and custom links (supporting guest access to employee links and print/PDF views).
-- Day rows, custom holidays, and labels can be saved with comprehensive type-validation, preventing junk strings and invalid schema structures.
-- Document IDs must conform to proper standard identifiers (e.g., standard identifiers under 128 characters, typically `global`).
+- Anyone can read a specific calendar via its shared ID, which connects visitors directly to a viewer's live calendar.
+- Only the authenticated owner (`request.auth.uid == resource.data.ownerId`) can update or delete their calendar.
+- Only authenticated users can create new calendars, setting themselves as the `ownerId`.
 
-## 2. The "Dirty Dozen" Payloads (Denial-of-Service / Integrity Attacks)
-We enforce that payloads matching the following invalid shapes are strictly rejected:
-1. Document ID Poisoning (1MB junk string ID)
-2. Ghost fields inside update requests
-3. Invalid non-object types for `dayRows`
-4. Empty or missing required strings (e.g., empty `calendarTitle`)
-5. Unbounded/oversized payload injections (e.g., `calendarTitle` exceeds limit)
-
-## 3. Rules Mapping
-We implement standard validation helpers in our rules matching `/calendars/{calendarId}` paths.
-- **Read Operations**: Universal read allowed to support the shared link functionality.
-- **Write Operations**: Type constraints and schema checks verified via `isValidCalendarState(request.resource.data)`.
+## 2. Security Rules Mapping
+- **Read**: `allow read: if true;` (enables guests to view the planner and fetch dynamic configurations synchronously).
+- **Create**: `allow create: if request.auth != null && request.resource.data.ownerId == request.auth.uid;`
+- **Update**: `allow update: if request.auth != null && resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == request.auth.uid;`
+- **Delete**: `allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;`

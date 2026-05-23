@@ -1,6 +1,6 @@
 {
-  "name": "Loraine's Staff Planner",
-  "description": "A monthly calendar featuring US Federal Holidays, customizable daily notes, automatic saving, and clean print/PDF layouts.",
+  "name": "Team Coverage Planner",
+  "description": "A collaborative multi-user staff planner featuring secure email/Google user accounts, custom coverage dashboards, US Federal Holidays, live automatic saving, and clean print/PDF layouts.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -2,9 +2,10 @@
   "entities": {
     "CalendarState": {
       "title": "CalendarState",
-      "description": "Entire application state for the PTO and Coverage Planner",
+      "description": "Entire application state for a specific calendar workspace owned by a user",
       "type": "object",
       "properties": {
+        "ownerId": { "type": "string", "description": "The user UID who owns this calendar" },
         "calendarTitle": { "type": "string", "description": "The title of the planner" },
         "timeClockUrl": { "type": "string", "description": "The dynamic link to the Employee Time Clock" },
         "handbookUrl": { "type": "string", "description": "The dynamic link to the Employee Handbook" },
@@ -22,6 +23,7 @@
         "dayRows": { "type": "object", "description": "Core cell grid schedules and color classes mapped by date key" }
       },
       "required": [
+        "ownerId",
         "calendarTitle",
         "timeClockUrl",
         "handbookUrl",
@@ -35,7 +37,7 @@
   "firestore": {
     "/calendars/{calendarId}": {
       "schema": "CalendarState",
-      "description": "Collection storing shared calendar planner states"
+      "description": "Collection storing user-specific calendar planner states"
     }
   }
 }

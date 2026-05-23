@@ -1,0 +1,43 @@
+{
+  "calendarTitle": "Team Coverage",
+  "timeClockUrl": "https://clock.payrollservers.us/#/clock/web/login",
+  "handbookUrl": "https://www.labor.ca.gov/",
+  "currentYear": 2026,
+  "currentMonth": 4,
+  "showHolidays": true,
+  "weekStartsOn": "Sunday",
+  "activeThemeId": "charcoal",
+  "fontSize": "sm",
+  "statusKeys": [
+    "time_off",
+    "flex_time",
+    "label_3",
+    "label_4"
+  ],
+  "statusLabels": {
+    "pto": "PTO Request",
+    "flex_time": "Flex Time",
+    "critical": "Critical Shift",
+    "time_off": "Time Off",
+    "label_3": "Label 3",
+    "purple": "Residential Standby",
+    "gap": "Gap / Needs Coverage",
+    "label_4": "Label 4",
+    "covered": "Covered / Filled"
+  },
+  "statusColors": {
+    "pto": "#fef08a",
+    "flex_time": "amber",
+    "time_off": "sky",
+    "critical": "#fda4af",
+    "purple": "#e9d5ff",
+    "label_3": "pink",
+    "gap": "#fecaca",
+    "covered": "#bbf7d0",
+    "label_4": "purple"
+  },
+  "companyHolidays": [],
+  "disabledHolidays": [],
+  "dayRows": {},
+  "managerName": "John Smith"
+}
